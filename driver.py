@@ -8,7 +8,7 @@ import torchvision.transforms as transforms
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from lion_pytorch import Lion
-
+import torch.optim as optim
 from model.unet_attention import AttentionUNet
 from model.unet_attention_with_ff import AttentionUNetFF
 from model.unet_inception import InceptionUNet
@@ -104,7 +104,7 @@ def parse_args():
         help="Whether to do self condition",
     )
     parser.add_argument(
-        "-lr", "--learning_rate", type=float, default=5e-4, help="learning rate"
+        "-lr", "--learning_rate", type=float, default=1e-3, help="learning rate"
     )
     parser.add_argument(
         "-ab1",
@@ -341,12 +341,12 @@ def main():
     # model = UNet_3Plus_attn()
     # model = AttentionUNetFF(n_classes=1)
     # model = AttentionUNetFFSE(n_classes=1)
-    # model = InceptionUNet(n_channels=3, n_classes=1)
+    model = InceptionUNet(n_channels=3, n_classes=1)
     # model = InceptionAttentionUNet(n_channels=3, n_classes=1)
     # model = InceptionAttentionUNetFF(n_channels=3, n_classes=1)
     # model = AttentionUNetFF3p(n_classes=1)
     # model = InceptionUNetFF(n_channels=3, n_classes=1)
-    model = UNet_3Plus_attn_FF()
+    # model = UNet_3Plus_attn_FF()
     # new
     # model = AttentionUNetFFskip(n_classes=1)
 
@@ -374,6 +374,9 @@ def main():
     # Initialize optimizer
     if not args.use_lion:
         print("Using Adam Optimizer.")
+        # optimizer = optim.SGD(
+        #     model.parameters(), lr=0.05, momentum=0.9, weight_decay=0.0001
+        # )
         optimizer = AdamW(
             model.parameters(),
             lr=args.learning_rate,
@@ -414,7 +417,9 @@ def main():
     scheduler = ReduceLROnPlateau(optimizer, "min")  # TODO: uncomment this
 
     # Iterate across training loop
-    for epoch in range(args.epochs):
+    least_loss = 9999999
+
+    for epoch in tqdm(range(args.epochs)):
         running_loss = 0.0
         losses = []
         train_iou = []
@@ -450,24 +455,42 @@ def main():
         print("Epoch Loss : {:.4f}".format(epoch_loss))
         accelerator.log({"epoch_loss": epoch_loss})
 
+        mean_dice_train = np.array(train_iou).mean()
+        accelerator.log({"Mean IOU on train set": mean_dice_train})
+
         val_mean_iou = None
         if val_data_generator is not None:
             val_mean_iou = compute_iou(
                 model, val_data_generator, device=accelerator.device
             )
-            accelerator.log({"Mean IOU on validation set": epoch_loss})
+            accelerator.log({"Mean IOU on validation set": val_mean_iou})
+
+        mean_loss = np.array(losses).mean()
+        accelerator.log({"Mean Dice loss (training epoch)": mean_loss})
+
         print(
             "Mean loss on train:",
-            np.array(losses).mean(),
+            mean_loss,
             "\nMean DICE on train:",
-            np.array(train_iou).mean(),
+            mean_dice_train,
             "\nMean DICE on validation:",
             val_mean_iou,
         )
 
-        mean_loss = np.array(losses).mean()
         scheduler.step(mean_loss)  # TODO: uncomment this
 
+        if mean_loss < least_loss:
+            least_loss = mean_loss
+            torch.save(
+                {
+                    "epoch": epoch,
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    # 'loss': loss.cpu().detach().numpy(),
+                    "loss": loss,
+                },
+                os.path.join(checkpoint_dir + "/best", "best_model.pt"),
+            )
         # INFERENCE
 
         if epoch % args.save_every == 0:

@@ -52,10 +52,17 @@ class AttentionUNetFF(nn.Module):
         # ------------------FF parser
         # TODO: make this inp dim dynamic - https://stackoverflow.com/a/73469100
 
-        self.ff1 = ff_parser.Conditioning(64, 64)
-        self.ff2 = ff_parser.Conditioning(32, 128)
-        self.ff3 = ff_parser.Conditioning(16, 256)
-        self.ff4 = ff_parser.Conditioning(8, 512)
+        # FOR SKIN LESION DATASET
+        # self.ff1 = ff_parser.Conditioning(64, 64)
+        # self.ff2 = ff_parser.Conditioning(32, 128)
+        # self.ff3 = ff_parser.Conditioning(16, 256)
+        # self.ff4 = ff_parser.Conditioning(8, 512)
+
+        # For BRAIN TUMOR DATASET
+        self.ff1 = ff_parser.Conditioning(128, 64)
+        self.ff2 = ff_parser.Conditioning(64, 128)
+        self.ff3 = ff_parser.Conditioning(32, 256)
+        self.ff4 = ff_parser.Conditioning(16, 512)
 
         # TODO: FF at decoder also. Ref unet_attention_with_ff_3p.py
         # ------------------
