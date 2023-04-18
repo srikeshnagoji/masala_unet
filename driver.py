@@ -16,6 +16,9 @@ from model.unet_attention_inception import InceptionAttentionUNet
 from model.unet_attention_inception_ff import InceptionAttentionUNetFF
 from model.unet3p_attention import UNet_3Plus_attn
 from model.unet3p_attention_ff import UNet_3Plus_attn_FF
+from model.UNet_3Plus_attn_FFAtDecoder import UNet_3Plus_attn_FFAtDecoder
+from model.unet_inception_ff_at_decoder import InceptionUNetFFAtDecoder
+from model.UNet_3Plus_attn_FF_enc_and_dec import UNet_3Plus_attn_FF_enc_and_dec
 from model.unet3p import UNet3Plus
 from model.unet.unet import UNet
 from model.unet_attention_with_ff_se import AttentionUNetFFSE
@@ -341,12 +344,14 @@ def main():
     # model = UNet_3Plus_attn()
     # model = AttentionUNetFF(n_classes=1)
     # model = AttentionUNetFFSE(n_classes=1)
-    model = InceptionUNet(n_channels=3, n_classes=1)
+    # model = InceptionUNet(n_channels=3, n_classes=1)
     # model = InceptionAttentionUNet(n_channels=3, n_classes=1)
     # model = InceptionAttentionUNetFF(n_channels=3, n_classes=1)
     # model = AttentionUNetFF3p(n_classes=1)
     # model = InceptionUNetFF(n_channels=3, n_classes=1)
+    # model = InceptionUNetFFAtDecoder(n_channels=3, n_classes=1)
     # model = UNet_3Plus_attn_FF()
+    model = UNet_3Plus_attn_FFAtDecoder()
     # new
     # model = AttentionUNetFFskip(n_classes=1)
 
