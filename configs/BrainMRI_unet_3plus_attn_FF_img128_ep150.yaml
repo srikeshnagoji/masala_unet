@@ -1,5 +1,5 @@
 MODEL:
-  NAME: BrainMRI_unet_3plus_attn_FF_img128_ep150
+  # NAME: BrainMRI_unet_3plus_attn_FF_img128_ep150
   MODEL_TYPE: UNet_3Plus_attn_FF
 
   MODEL_CONFIG:
@@ -9,7 +9,7 @@ MODEL:
     is_deconv: True
     is_batchnorm: True
 
-  PRETRAIN_CKPT: BrainMRI_unet_3plus_attn_FF_img128_ep150
+  PRETRAIN_CKPT: True
 
 SEED: 1234
 

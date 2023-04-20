@@ -94,16 +94,25 @@ class Conditioning(nn.Module):
         # x = x * self.ff_parser_attn_map
         # x = ifft2(x).real
         # x = x.type(dtype)
+        # ---------------WINDOWS-CUDA
+        if torch.cuda.is_available():
+            x_ = x
+            x_ = fft2(x_)
+            x_ = x_ * self.ff_parser_attn_map
+            x_ = ifft2(x_).real
+            x_ = x_.type(dtype)
         # ---------------
-        # cpu = torch.device("cpu")
-        # mps0 = torch.device("mps:0")
-        x_ = x#.to(cpu)
-        x_ = fft2(x_)
-        x_ = x_ * self.ff_parser_attn_map#.to(cpu)
-        x_ = ifft2(x_).real
-        x_ = x_.type(dtype)
-        # x = x_.to(mps0)
-        # self.ff_parser_attn_map = self.ff_parser_attn_map.to(mps0)
+        else:
+            # ---------------MAC - M1 - MPS
+            cpu = torch.device("cpu")
+            mps0 = torch.device("mps:0")
+            x_ = x.to(cpu)
+            x_ = fft2(x_)
+            x_ = x_ * self.ff_parser_attn_map.to(cpu)
+            x_ = ifft2(x_).real
+            x_ = x_.type(dtype)
+            x = x_.to(mps0)
+            self.ff_parser_attn_map = self.ff_parser_attn_map.to(mps0)
         # ---------------
         # eq 3 in paper
 
@@ -134,12 +143,12 @@ class FourierBlock(nn.Module):
         # self.mps0 = torch.device("mps:0")
 
     def forward(self, x):
-        x_ = x#.to(self.cpu)
+        x_ = x  # .to(self.cpu)
 
         # Apply 2D Fourier transform to input feature maps
         x_fft = torch.fft.fft2(x_)
 
-        x_fft_real = x_fft.real#.to(self.mps0)
+        x_fft_real = x_fft.real  # .to(self.mps0)
         # Branch 1: 1x1 Convolution
         x1 = self.conv1(x_fft_real)
         x1 = self.bn1(x1)

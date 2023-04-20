@@ -2,56 +2,97 @@ import sys
 import argparse
 from config import get_config
 import torch
-
+from enum import Enum
 from torch.utils.data import Dataset, DataLoader
+
+
+class DatasetPurpose(Enum):
+    TRAIN_VAL = "train"
+    TEST = "test"
+    # VALIDATION = "validation"
+
 
 sys.path.append("../")
 
 
-
-
 def get_args_config():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--cfg', type=str, required=True, metavar="FILE", help='path to run config file', )
+    parser.add_argument(
+        "--cfg",
+        type=str,
+        required=True,
+        metavar="FILE",
+        help="path to run config file",
+    )
     args = parser.parse_args()
     config = get_config(args)
-    return config
+    file_name = str(vars(args)["cfg"].split("/")[-1].split(".")[0])
+    return file_name, config
 
 
-def load_data(config):
-
+def load_data(config, datasetPurpose: DatasetPurpose):
     # Load Dataset (Generic Code):
-    module = __import__(name=f'dataset.dataset_loaders.{config.DATASET.DATASET_LOADER}',fromlist = [f'{config.DATASET.DATASET_LOADER}'])
-
-    train_dataloader = DataLoader(
-        getattr(module, f'{config.DATASET.DATASET_LOADER}')(**vars(config.DATASET.DATASET_CONFIG), train_val_split_ratio=config.TRAIN.TRAIN_VAL_SPLIT, train_test_split_ratio=config.TEST.TRAIN_TEST_SPLIT, transform=config.DATASET.DATASET_TRANSFORMS, seed=config.SEED, dataset_cat='Train'),
-        batch_size=config.TRAIN.BATCH_SIZE, 
-        shuffle=False,
-        num_workers=8,
-        pin_memory=True,
-        persistent_workers=True)
-
+    module = __import__(
+        name=f"dataset.dataset_loaders.{config.DATASET.DATASET_LOADER}",
+        fromlist=[f"{config.DATASET.DATASET_LOADER}"],
+    )
+    train_dataloader = None
     val_dataloader = None
     test_dataloader = None
 
-    if config.TRAIN.TRAIN_VAL_SPLIT < 1:
-        val_dataloader = DataLoader(
-            getattr(module, f'{config.DATASET.DATASET_LOADER}')(**vars(config.DATASET.DATASET_CONFIG), train_val_split_ratio=config.TRAIN.TRAIN_VAL_SPLIT, train_test_split_ratio=config.TEST.TRAIN_TEST_SPLIT, transform=config.DATASET.DATASET_TRANSFORMS, seed=config.SEED, dataset_cat='Val'),
-            batch_size=config.TRAIN.BATCH_SIZE, 
+    if datasetPurpose == DatasetPurpose.TRAIN_VAL:
+        train_dataloader = DataLoader(
+            getattr(module, f"{config.DATASET.DATASET_LOADER}")(
+                **vars(config.DATASET.DATASET_CONFIG),
+                train_val_split_ratio=config.TRAIN.TRAIN_VAL_SPLIT,
+                train_test_split_ratio=config.TEST.TRAIN_TEST_SPLIT,
+                transform=config.DATASET.DATASET_TRANSFORMS,
+                seed=config.SEED,
+                dataset_cat="Train",
+            ),
+            batch_size=config.TRAIN.BATCH_SIZE,
             shuffle=False,
             num_workers=8,
             pin_memory=True,
-            persistent_workers=True)
-    
-    if config.TEST.TRAIN_TEST_SPLIT < 1:
-        # Split has to be made..
-        test_dataloader = DataLoader(
-            getattr(module, f'{config.DATASET.DATASET_LOADER}')(**vars(config.DATASET.DATASET_CONFIG), train_val_split_ratio=config.TRAIN.TRAIN_VAL_SPLIT, train_test_split_ratio=config.TEST.TRAIN_TEST_SPLIT, transform=config.DATASET.DATASET_TRANSFORMS, seed=config.SEED, dataset_cat='Test'),
-            shuffle=False,
-            num_workers=8,
-            pin_memory=True,
-            persistent_workers=True)
+            persistent_workers=True,
+        )
 
+        if config.TRAIN.TRAIN_VAL_SPLIT < 1:
+            val_dataloader = DataLoader(
+                getattr(module, f"{config.DATASET.DATASET_LOADER}")(
+                    **vars(config.DATASET.DATASET_CONFIG),
+                    train_val_split_ratio=config.TRAIN.TRAIN_VAL_SPLIT,
+                    train_test_split_ratio=config.TEST.TRAIN_TEST_SPLIT,
+                    transform=config.DATASET.DATASET_TRANSFORMS,
+                    seed=config.SEED,
+                    dataset_cat="Val",
+                ),
+                batch_size=config.TRAIN.BATCH_SIZE,
+                shuffle=False,
+                num_workers=8,
+                pin_memory=True,
+                persistent_workers=True,
+            )
+        return train_dataloader, val_dataloader
+
+    elif DatasetPurpose.TEST == datasetPurpose:
+        if config.TEST.TRAIN_TEST_SPLIT < 1:
+            # Split has to be made..
+            test_dataloader = DataLoader(
+                getattr(module, f"{config.DATASET.DATASET_LOADER}")(
+                    **vars(config.DATASET.DATASET_CONFIG),
+                    train_val_split_ratio=config.TRAIN.TRAIN_VAL_SPLIT,
+                    train_test_split_ratio=config.TEST.TRAIN_TEST_SPLIT,
+                    transform=config.DATASET.DATASET_TRANSFORMS,
+                    seed=config.SEED,
+                    dataset_cat="Test",
+                ),
+                shuffle=False,
+                num_workers=8,
+                pin_memory=True,
+                persistent_workers=True,
+            )
+        return test_dataloader
     # train_dataset = ISICDataset(
     #     args.data_path,
     #     args.csv_file,
@@ -110,11 +151,12 @@ def load_data(config):
     
 
     """
-    
-    return train_dataloader, val_dataloader, test_dataloader
+
+    return None
 
 
 ## MPS..
+
 
 def optimizer_to(optim, device):
     for param in optim.state.values():

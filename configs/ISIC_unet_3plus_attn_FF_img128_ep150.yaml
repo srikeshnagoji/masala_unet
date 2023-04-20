@@ -1,5 +1,5 @@
 MODEL:
-  NAME: ISIC_unet_3plus_attn_FF_img128_ep150
+  # NAME: ISIC_unet_3plus_attn_FF_img128_ep150
   MODEL_TYPE: UNet_3Plus_attn_FF
 
   MODEL_CONFIG:
@@ -9,14 +9,16 @@ MODEL:
     is_deconv: True
     is_batchnorm: True
 
-  PRETRAIN_CKPT: ISIC_unet_3plus_attn_FF_img128_ep150
+  PRETRAIN_CKPT: True
 
 SEED: 1234
 
 DATASET:
   DATASET_LOADER: ISICDataset
   DATASET_CONFIG:
-    base_path: "E:/Projects/Data-Science/MTech/Courses/16.Capstone-Projects/Swin-Unet-Generic/swin_unet/dataset/skin_lesion"
+    # base_path: "E:/Projects/Data-Science/MTech/Courses/16.Capstone-Projects/Swin-Unet-Generic/swin_unet/dataset/skin_lesion"
+    base_path: "/Users/srikeshnagoji/Documents/PythonWorkSpace/jupyter_lab_workspace/PES/final_thesis/dataset/ISIC_skin_converted"
+
     # csv_file_name: ISBI2016_ISIC_Part3B_Training_GroundTruth.csv
     # img_folder_name: ISBI2016_ISIC_Part3B_Training_Data
     subset_count: -1
@@ -44,7 +46,7 @@ TRAIN:
 
   SAVE_INTERVAL: 1
 
-  OPTIM_NAME: AdamW
+  OPTIM_NAME: Lion
   OPTIM_CONFIG:
     learning_rate: 1e-03
     adam_beta1: 0.95
@@ -63,10 +65,12 @@ TEST:
   # LOG_OUTPUT_DIR: "test_log\\swin_tiny_patch4_window7_224_ep300\\log"
 
   TRAIN_TEST_SPLIT: 0.12
+  LOAD_CKPT: "best" # OR "cur"
 
   DETERMINISTIC: True
   N_GPU: 1
   IS_SAVENII: True
+
 
   ACCELERATOR_CONFIG:
     REPORT_TO: wandb

@@ -1,5 +1,5 @@
 MODEL:
-  NAME: swin_tiny_patch4_window7_img224_ep150
+  # NAME: swin_tiny_patch4_window7_img224_ep150
   MODEL_TYPE: SwinUnet
   
   #PRETRAIN_CKPT: "./pretrained_ckpt/swin_tiny_patch4_window10_320_ep150.pth"
@@ -11,7 +11,7 @@ MODEL:
     use_checkpoint: False
     final_upsample: "expand_first"
 
-  PRETRAIN_CKPT: swin_tiny_patch4_window7_img224_ep150
+  PRETRAIN_CKPT: True
 
     # EMBED_DIM: 96
     # DEPTHS: [ 2, 2, 2, 2 ]

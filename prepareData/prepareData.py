@@ -7,7 +7,14 @@ from PIL import Image
 from sklearn.model_selection import train_test_split
 
 
-def get_dataset_dataframe(base_path: str, subset_count: int, train_val_split_ratio: float, train_test_split_ratio: float, seed: int, dataset_cat: str):
+def get_dataset_dataframe(
+    base_path: str,
+    subset_count: int,
+    train_val_split_ratio: float,
+    train_test_split_ratio: float,
+    seed: int,
+    dataset_cat: str,
+):
     data = []
     base_path = Path(base_path)
     for dir_ in os.listdir(base_path):
@@ -19,14 +26,17 @@ def get_dataset_dataframe(base_path: str, subset_count: int, train_val_split_rat
         else:
             print(f"[INFO] This is not a dir --> {dir_path}")
 
-
     df = pd.DataFrame(data, columns=["dir_name", "image_path"])
 
     df_imgs = df[~df["image_path"].str.contains("mask")].reset_index(drop=True)
-    df_masks = df_imgs.copy() #df[df["image_path"].str.contains("mask")].reset_index(drop=True)
+    df_masks = (
+        df_imgs.copy()
+    )  # df[df["image_path"].str.contains("mask")].reset_index(drop=True)
 
     # Mask Mapping correction..
-    df_masks['image_path'] = df_imgs['image_path'].apply(lambda x: f'{x[:-len(".tif")]}_mask.tif')
+    df_masks["image_path"] = df_imgs["image_path"].apply(
+        lambda x: f'{x[:-len(".tif")]}_mask.tif'
+    )
 
     if subset_count != -1:
         df_imgs = df_imgs[:subset_count]
@@ -44,38 +54,44 @@ def get_dataset_dataframe(base_path: str, subset_count: int, train_val_split_rat
     # )
 
     imgs = list(df_imgs["image_path"].values)
-    masks = list(df_imgs["image_path"].values)
+    masks = list(df_masks["image_path"].values)
 
     # print(imgs)
     # print(masks)
 
     dff = pd.DataFrame(
         # {"patient": df_imgs.dir_name.values, TODO: Removed this, add this extra info later when needed
-            {"image_path": imgs, "mask_path": masks}
+        {"image_path": imgs, "mask_path": masks}
     )
     dff["diagnosis"] = dff["mask_path"].apply(lambda x: pos_neg_diagnosis(x))
 
     # print("Amount of patients: ", len(set(dff.patient)))
     print("Amount of records: ", len(dff))
 
-    train_df, val_df = train_test_split(dff, stratify=dff.diagnosis, test_size=train_val_split_ratio, random_state=seed)
+    train_df, val_df = train_test_split(
+        dff, stratify=dff.diagnosis, test_size=train_val_split_ratio, random_state=seed
+    )
     train_df = train_df.reset_index(drop=True)
     val_df = val_df.reset_index(drop=True)
 
     train_df, test_df = train_test_split(
-        train_df, stratify=train_df.diagnosis, test_size=train_test_split_ratio, random_state=seed
+        train_df,
+        stratify=train_df.diagnosis,
+        test_size=train_test_split_ratio,
+        random_state=seed,
     )
     train_df = train_df.reset_index(drop=True)
     test_df = test_df.reset_index(drop=True)
 
-    if dataset_cat == 'Train':
+    if dataset_cat == "Train":
         df = train_df
-    elif dataset_cat == 'Val':
+    elif dataset_cat == "Val":
         df = val_df
-    elif dataset_cat == 'Test':
+    elif dataset_cat == "Test":
         df = test_df
-    
+
     return df
+
 
 def pos_neg_diagnosis(mask_path):
     """
@@ -89,10 +105,14 @@ def pos_neg_diagnosis(mask_path):
 
 
 def get_df_item(df, idx, transform_func):
+    image = np.asarray(Image.open(df["image_path"].iloc[idx]).convert("RGB"))
+    mask = np.asarray(Image.open(df["mask_path"].iloc[idx]).convert("L"))
 
-    image = np.asarray(Image.open(df['image_path'].iloc[idx]).convert("RGB"))
-    mask = np.asarray(Image.open(df['mask_path'].iloc[idx]).convert("L"))
-    
+    # print(df["image_path"].iloc[idx])
+    # print(df["image_path"].iloc[idx])
+    # Image.fromarray(image).show()
+    # Image.fromarray(mask).show()
+
     # image = np.array(cv2.imread(df['image_path'].iloc[idx]))
     # mask = np.array(cv2.imread(df['mask_path'].iloc[idx], 0))
 

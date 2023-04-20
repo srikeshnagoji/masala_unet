@@ -4,11 +4,13 @@ from tqdm import tqdm
 import torch
 import numpy as np
 import pandas as pd
+
 # import torchvision.transforms as transforms
 from torch.optim import AdamW, SGD
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from lion_pytorch import Lion
-
+from PIL import Image
+from .util.helper import DatasetPurpose
 import pickle
 
 import time
@@ -191,14 +193,14 @@ train_loss = DiceLoss()
 #     )
 #     return parser.parse_args()
 
+
 def main():
-    
     # Start of main..
     start = time.time()
     # args = parse_args()
 
     ## Get the Configs..
-    config = get_args_config()
+    file_name, config = get_args_config()
 
     wandb_tracker = None
 
@@ -206,27 +208,29 @@ def main():
     random.seed(config.SEED)
     np.random.seed(config.SEED)
     torch.manual_seed(config.SEED)
-    
 
-    checkpoint_dir = os.path.join(config.TRAIN.OUTPUT_DIR, config.MODEL.NAME)
+    checkpoint_dir = os.path.join(config.TRAIN.OUTPUT_DIR, file_name)
     os.makedirs(checkpoint_dir, exist_ok=True)
-    
+
     # logging_dir = os.path.join(args.output_dir, args.logging_dir)
-    
+
     accelerator = Accelerator(
         gradient_accumulation_steps=config.TRAIN.ACCELERATOR_CONFIG.GRADIENT_ACCUMULATION_STEPS,
         mixed_precision=config.TRAIN.ACCELERATOR_CONFIG.MIXED_PRECISION,
         log_with=config.TRAIN.ACCELERATOR_CONFIG.REPORT_TO,
-        logging_dir='logs',
+        logging_dir="logs",
     )
     if accelerator.is_main_process:
         # accelerator.init_trackers("experiment", config=vars(args))
         # accelerator.init_trackers("unet_vanced", config=vars(args))
-        accelerator.init_trackers(config.DATASET.DATASET_LOADER,init_kwargs={"wandb":{'resume':'allow', 'id':config.MODEL.NAME}})#, config=vars(args))
-        wandb_tracker = accelerator.get_tracker('wandb')
+        accelerator.init_trackers(
+            config.DATASET.DATASET_LOADER,
+            init_kwargs={"wandb": {"resume": "allow", "id": file_name}},
+        )  # , config=vars(args))
+        wandb_tracker = accelerator.get_tracker("wandb")
         # wandb_tracker.generate_id()
 
-    if accelerator.device == 'cuda':
+    if accelerator.device == "cuda":
         torch.cuda.manual_seed(config.SEED)
 
         if not config.TRAIN.DETERMINISTIC:
@@ -236,7 +240,6 @@ def main():
             backends.cudnn.benchmark = False
             backends.cudnn.deterministic = True
 
-    
     # DEFINE MODEL
     # model = UNet()
     # model = AttentionUNet(n_classes=1)
@@ -249,13 +252,17 @@ def main():
     # model = InceptionAttentionUNetFF(n_channels=3, n_classes=1)
     # model = AttentionUNetFF3p(n_classes=1)
     # model = InceptionUNetFF(n_channels=3, n_classes=1)
-    
+
     # model = UNet_3Plus_attn_FF()
-    
+
     # Dynamically Load the Model, based on the Config..
     # 'from model.UNet_3Plus_attn_FF import UNet_3Plus_attn_FF'
-    module = __import__(name=f'model.{config.MODEL.MODEL_TYPE}',fromlist = [f'{config.MODEL.MODEL_TYPE}'])
-    model = getattr(module, f'{config.MODEL.MODEL_TYPE}')(**vars(config.MODEL.MODEL_CONFIG))
+    module = __import__(
+        name=f"model.{config.MODEL.MODEL_TYPE}", fromlist=[f"{config.MODEL.MODEL_TYPE}"]
+    )
+    model = getattr(module, f"{config.MODEL.MODEL_TYPE}")(
+        **vars(config.MODEL.MODEL_CONFIG)
+    )
 
     # print(f'Checkpoint 1 :{time.time()-start}')
     # new
@@ -271,14 +278,13 @@ def main():
     #     self_condition=args.self_condition,
     # )
 
-    
     # LOAD DATA
-    
-    train_data_loader, val_data_generator, test_data_generator = load_data(config)
-    
+
+    train_data_loader, val_data_generator = load_data(config, DatasetPurpose.TRAIN_VAL)
+
     # print(f'Checkpoint 2 :{time.time()-start}')
     # print(type(train_data_generator),type(val_data_generator), type(test_data_generator))
-    
+
     # training_generator = tqdm(data_loader, total=int(len(data_loader)))
     # if args.scale_lr:
     #     args.learning_rate = (
@@ -287,41 +293,45 @@ def main():
     #         * args.batch_size
     #         * accelerator.num_processes
     #     )
-    
-    
+
     # Initialize optimizer
     optimizer = None
-    if config.TRAIN.OPTIM_NAME == 'SGD':
+    if config.TRAIN.OPTIM_NAME == "SGD":
         print("Using SGD Optimizer.")
         optimizer = SGD(
-            model.parameters(), 
-            lr=float(str(config.TRAIN.OPTIM_CONFIG.learning_rate)), 
-            momentum=0.9, 
-            weight_decay=0.0001
+            model.parameters(),
+            lr=float(str(config.TRAIN.OPTIM_CONFIG.learning_rate)),
+            momentum=0.9,
+            weight_decay=0.0001,
         )
-        
-    elif config.TRAIN.OPTIM_NAME == 'Lion':
+
+    elif config.TRAIN.OPTIM_NAME == "Lion":
         print("Using LION Optimizer.")
         optimizer = Lion(
             model.parameters(),
             lr=float(str(config.TRAIN.OPTIM_CONFIG.learning_rate)),
-            betas=(float(str(config.TRAIN.OPTIM_CONFIG.adam_beta1)), float(str(config.TRAIN.OPTIM_CONFIG.adam_beta2))),
+            betas=(
+                float(str(config.TRAIN.OPTIM_CONFIG.adam_beta1)),
+                float(str(config.TRAIN.OPTIM_CONFIG.adam_beta2)),
+            ),
             weight_decay=float(str(config.TRAIN.OPTIM_CONFIG.adam_weight_decay)),
         )
-    elif config.TRAIN.OPTIM_NAME == 'AdamW':
+    elif config.TRAIN.OPTIM_NAME == "AdamW":
         print("Using Adam Optimizer.")
         optimizer = AdamW(
             model.parameters(),
             lr=float(str(config.TRAIN.OPTIM_CONFIG.learning_rate)),
-            betas=(float(str(config.TRAIN.OPTIM_CONFIG.adam_beta1)), float(str(config.TRAIN.OPTIM_CONFIG.adam_beta2))),
+            betas=(
+                float(str(config.TRAIN.OPTIM_CONFIG.adam_beta1)),
+                float(str(config.TRAIN.OPTIM_CONFIG.adam_beta2)),
+            ),
             weight_decay=float(str(config.TRAIN.OPTIM_CONFIG.adam_weight_decay)),
             eps=float(str(config.TRAIN.OPTIM_CONFIG.adam_epsilon)),
         )
 
-    
     # TRAIN MODEL
     counter = 0
-    
+
     model, optimizer, train_data_loader = accelerator.prepare(
         model, optimizer, train_data_loader
     )
@@ -334,38 +344,38 @@ def main():
     # print(f'Checkpoint 3 :{time.time()-start}')
     cur_epoch = 0
     try:
-        if config.MODEL.PRETRAIN_CKPT is not None:
-            print(f"Loading model from previous checkpoint: {config.MODEL.PRETRAIN_CKPT}_cur.pt'")
-            load_path = str(f'output/{config.MODEL.PRETRAIN_CKPT}/{config.MODEL.PRETRAIN_CKPT}_cur.pt')
+        if bool(config.MODEL.PRETRAIN_CKPT):
+            print(f"Loading model from previous checkpoint: {file_name}_cur.pt'")
+            load_path = str(f"output/{file_name}/{file_name}_cur.pt")
 
-            if (os.path.exists(load_path) == False):
+            if os.path.exists(load_path) == False:
                 raise Exception("Checkpoint does not exist, conitnuing..")
-            
+
             # save_dict = torch.load(load_path)
             # print(wandb.restore(load_path))
             # print(json.load(open(load_path, encoding='utf-8')))
-            with open(load_path,'rb') as f:
-                save_dict = torch.load(f,pickle_module=pickle)
+            with open(load_path, "rb") as f:
+                save_dict = torch.load(f, pickle_module=pickle)
                 # print(save_dict)
             wandb.restore(load_path)
             model.load_state_dict(save_dict["model_state_dict"])
             optimizer.load_state_dict(save_dict["optimizer_state_dict"])
-            cur_epoch = save_dict['epoch'] + 1
-            cur_loss = save_dict['loss']
+            cur_epoch = save_dict["epoch"] + 1
+            cur_loss = save_dict["loss"]
 
             accelerator.print(f"Loaded from {load_path}")
     except Exception as e:
         cur_epoch = 0
-        print(f'Failed: {str(e)}')
+        print(f"Failed: {str(e)}")
         # return
         # print("Did not find config.MODEL.PRETRAIN_CKPT, Moving on..")
 
     # print(f'Checkpoint 4 :{time.time()-start}')
     # printing number of params
     pytorch_total_params = sum(p.numel() for p in model.parameters())
-    print(f"Total params of {config.MODEL.NAME} model: {pytorch_total_params:,}")
+    print(f"Total params of {file_name} model: {pytorch_total_params:,}")
     pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"Trainable params of {config.MODEL.NAME} model: {pytorch_total_params:,}")
+    print(f"Trainable params of {file_name} model: {pytorch_total_params:,}")
 
     # take smaller steps as we reach minimum
     scheduler = ReduceLROnPlateau(optimizer, "min")  # TODO: uncomment this
@@ -375,12 +385,12 @@ def main():
     img_snapshot = None
     mask_snapshot = None
 
-    accelerator.log({"Dice loss": 0})
-    accelerator.log({"Train IOU": 0})
+    # accelerator.log({"Dice loss": 0})
+    # accelerator.log({"Train IOU": 0})
 
-    accelerator.log({"Mean DICE on train set": 0})
-    accelerator.log({"Mean DICE on validation set": 0})
-    accelerator.log({"Mean Dice loss (training epoch)": 0})
+    # accelerator.log({"Mean DICE on train set": 0})
+    # accelerator.log({"Mean DICE on validation set": 0})
+    # accelerator.log({"Mean Dice loss (training epoch)": 0})
 
     # run_step = 0
     # Iterate across training loop
@@ -393,15 +403,15 @@ def main():
         train_batch_counter = 0
         for img, mask in tqdm(train_data_loader):
             # print(f'Checkpoint 6 :{time.time()-start}')
+
             with accelerator.accumulate(model):
-                
                 # print(img.size(), mask.size())
                 img = img.to(accelerator.device)
                 mask = mask.to(accelerator.device)
-                
+
                 # Take an image snapshot somewhere in the middle of the complete loader..
-                
-                if (train_batch_counter < len(train_data_loader)/2):
+
+                if train_batch_counter < len(train_data_loader) / 2:
                     img_snapshot = img
                     mask_snapshot = mask
 
@@ -422,13 +432,13 @@ def main():
                 # if train_batch_counter % config.WANDB.LOG_STEP_INTERVAL == 0:
                 # accelerator.log({"Dice loss": loss.item()})  # Log loss to wandb
                 # accelerator.log({"Train IOU": train_dice})  # Log IOU to wandb
-                    
+
                 accelerator.backward(loss)
                 optimizer.step()
                 optimizer.zero_grad()
 
-                train_batch_counter+=1
-            
+                train_batch_counter += 1
+
             torch.cuda.empty_cache()
 
         running_loss += loss.item() * img.size(0)
@@ -439,17 +449,16 @@ def main():
         # print(f'Checkpoint 7 :{time.time()-start}')
 
         mean_dice_train = np.array(train_iou).mean()
-        
 
         val_mean_iou = None
         if val_data_generator is not None:
             val_mean_iou = compute_iou(
                 model, val_data_generator, device=accelerator.device
             )
-        
+
         # print(f'Checkpoint 8 :{time.time()-start}')
         mean_loss = np.array(losses).mean()
-        
+
         # print(f'Checkpoint 9 :{time.time()-start}')
         print(
             "Mean loss on train:",
@@ -462,7 +471,13 @@ def main():
 
         scheduler.step(mean_loss)  # TODO: uncomment this
 
-        accelerator.log({"Mean DICE on train set": float(mean_dice_train), "Mean DICE on validation set": float(val_mean_iou), "Mean Dice loss (training epoch)": float(mean_loss)})
+        accelerator.log(
+            {
+                "Mean DICE on train set": float(mean_dice_train),
+                "Mean DICE on validation set": float(val_mean_iou),
+                "Mean Dice loss (training epoch)": float(mean_loss),
+            }
+        )
         # accelerator.log({"Mean DICE on validation set": float(val_mean_iou)})
         # accelerator.log({"Mean Dice loss (training epoch)": float(mean_loss)})
 
@@ -471,9 +486,13 @@ def main():
         # SAVE BEST MODEL..
         if epoch_loss < min_epoch_dice_loss:
             if epoch % config.TRAIN.SAVE_INTERVAL == 0:
-                checkpoint_path = os.path.join( config.TRAIN.OUTPUT_DIR, config.MODEL.NAME ,f"{config.MODEL.NAME}_best.pt" )
-                
-                with open(checkpoint_path,'wb') as f:
+                checkpoint_path = os.path.join(
+                    config.TRAIN.OUTPUT_DIR,
+                    file_name,
+                    f"{file_name}_best.pt",
+                )
+
+                with open(checkpoint_path, "wb") as f:
                     torch.save(
                         {
                             "epoch": epoch,
@@ -481,8 +500,11 @@ def main():
                             "optimizer_state_dict": optimizer.state_dict(),
                             # 'loss': loss.cpu().detach().numpy(),
                             "loss": mean_loss,
-                        },f,pickle_module=pickle)
-                
+                        },
+                        f,
+                        pickle_module=pickle,
+                    )
+
                 wandb.save(checkpoint_path)
 
             min_epoch_dice_loss = epoch_loss
@@ -491,9 +513,13 @@ def main():
 
         # BACKUP SAVE (current model..)
         if epoch % config.TRAIN.SAVE_INTERVAL == 0:
-            checkpoint_path = os.path.join( config.TRAIN.OUTPUT_DIR, config.MODEL.NAME ,f"{config.MODEL.NAME}_cur.pt" )
-            
-            with open(checkpoint_path,'wb') as f:
+            checkpoint_path = os.path.join(
+                config.TRAIN.OUTPUT_DIR,
+                file_name,
+                f"{file_name}_cur.pt",
+            )
+
+            with open(checkpoint_path, "wb") as f:
                 torch.save(
                     {
                         "epoch": epoch,
@@ -501,8 +527,11 @@ def main():
                         "optimizer_state_dict": optimizer.state_dict(),
                         # 'loss': loss.cpu().detach().numpy(),
                         "loss": mean_loss,
-                    },f,pickle_module=pickle)
-            
+                    },
+                    f,
+                    pickle_module=pickle,
+                )
+
             wandb.save(checkpoint_path)
 
         # print(f'Checkpoint 12 :{time.time()-start}')
@@ -528,6 +557,7 @@ def main():
                     )
 
         # print(f'Checkpoint 13 :{time.time()-start}')
+
 
 if __name__ == "__main__":
     main()
