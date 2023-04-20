@@ -1,6 +1,10 @@
 data/
+output/
 wandb/
 output.png
+
+dataset/skin_lesion/skin_lesion_combined/*
+dataset/BraTS2021_00495_case
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -130,3 +134,5 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+

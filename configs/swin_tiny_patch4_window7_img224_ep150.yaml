@@ -1,0 +1,91 @@
+MODEL:
+  NAME: swin_tiny_patch4_window7_img224_ep150
+  MODEL_TYPE: SwinUnet
+  
+  #PRETRAIN_CKPT: "./pretrained_ckpt/swin_tiny_patch4_window10_320_ep150.pth"
+  MODEL_CONFIG:
+    img_size: 224
+    num_classes: 1
+    window_size: 7
+    drop_path_rate: 0.2
+    use_checkpoint: False
+    final_upsample: "expand_first"
+
+  PRETRAIN_CKPT: swin_tiny_patch4_window7_img224_ep150
+
+    # EMBED_DIM: 96
+    # DEPTHS: [ 2, 2, 2, 2 ]
+    # DECODER_DEPTHS: [ 2, 2, 2, 1]
+    # NUM_HEADS: [ 3, 6, 12, 24 ]
+    
+    
+    # DROP_RATE: 0
+
+    # PATCH_SIZE: 4
+    # IN_CHANS: 3
+    # MLP_RATIO: 4.
+    # QKV_BIAS: True
+    # QK_SCALE: None
+    # APE: False
+    # PATCH_NORM: True
+    
+
+SEED: 1234
+
+DATASET:
+  DATASET_LOADER: SynapseDataset
+  DATASET_CONFIG:
+    base_path: E:/Projects/Data-Science/MTech/Courses/16.Capstone-Projects/Data/synapse_combined
+  
+  DATASET_TRANSFORMS:
+    DATASET_TRANSFORM_NAME: Default
+    DATASET_TRANSFORM_CONFIG:
+      image_size: 224
+
+WANDB:
+  LOG_STEP_INTERVAL: 10
+  SAVE_OUTPUT_EPOCH_INTERVAL: 5
+# DATASETS:
+#   Synapse:
+#     ROOT_PATH: "./data/project_TransUNet/data/Synapse"
+#     LIST_DIR: "./lists/lists_Synapse"
+#     Z_SPACING: 1
+
+TRAIN:
+  OUTPUT_DIR: "output"
+  MAX_EPOCHS: 150
+  BASE_LR: 0.05
+  BATCH_SIZE: 4
+
+  DETERMINISTIC: True
+  SEED: 1234
+  N_GPU: 1
+  USE_CHECKPOINT: False
+
+  TRAIN_VAL_SPLIT: 0.1
+
+  SAVE_INTERVAL: 1
+
+  OPTIM_NAME: Lion
+  OPTIM_CONFIG:
+    learning_rate: 0.05
+    adam_beta1: 0.95
+    adam_beta2: 0.999
+    adam_weight_decay: 1e-06
+    adam_epsilon: 1e-08
+
+  ACCELERATOR_CONFIG:
+    REPORT_TO: wandb
+    GRADIENT_ACCUMULATION_STEPS: 4
+    MIXED_PRECISION: 'no'
+
+TEST:
+  OUTPUT_DIR: "test_log\\swin_tiny_patch4_window7_224_ep150"
+  LOG_OUTPUT_DIR: "test_log\\swin_tiny_patch4_window7_224_ep150\\log"
+
+  TRAIN_TEST_SPLIT: 0.12
+
+  DETERMINISTIC: True
+  SEED: 1234
+  N_GPU: 1
+  IS_SAVENII: True

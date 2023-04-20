@@ -20,12 +20,17 @@ class DiceLoss(nn.Module):
 #         inputs = F.sigmoid(inputs)       
         
         #flatten label and prediction tensors
+
         inputs = inputs.view(-1)
         targets = targets.view(-1)
         
-        intersection = (inputs * targets).sum()                            
+        # For SWIN..
+        # inputs = inputs.contiguous().view(-1)
+        # targets = targets.contiguous().view(-1)
+        # print(inputs.size(), targets.size())
+
+        intersection = (inputs * targets).sum()
         dice = (2.*intersection + smooth)/(inputs.sum() + targets.sum() + smooth)  
-        
         return 1 - dice
 
 def compute_iou(model, loader, device:str, threshold=0.3):

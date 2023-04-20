@@ -95,15 +95,15 @@ class Conditioning(nn.Module):
         # x = ifft2(x).real
         # x = x.type(dtype)
         # ---------------
-        cpu = torch.device("cpu")
-        mps0 = torch.device("mps:0")
-        x_ = x.to(cpu)
+        # cpu = torch.device("cpu")
+        # mps0 = torch.device("mps:0")
+        x_ = x#.to(cpu)
         x_ = fft2(x_)
-        x_ = x_ * self.ff_parser_attn_map.to(cpu)
+        x_ = x_ * self.ff_parser_attn_map#.to(cpu)
         x_ = ifft2(x_).real
         x_ = x_.type(dtype)
-        x = x_.to(mps0)
-        self.ff_parser_attn_map = self.ff_parser_attn_map.to(mps0)
+        # x = x_.to(mps0)
+        # self.ff_parser_attn_map = self.ff_parser_attn_map.to(mps0)
         # ---------------
         # eq 3 in paper
 
@@ -130,16 +130,16 @@ class FourierBlock(nn.Module):
         self.conv3 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
         self.bn3 = nn.BatchNorm2d(out_channels)
 
-        self.cpu = torch.device("cpu")
-        self.mps0 = torch.device("mps:0")
+        # self.cpu = torch.device("cpu")
+        # self.mps0 = torch.device("mps:0")
 
     def forward(self, x):
-        x_ = x.to(self.cpu)
+        x_ = x#.to(self.cpu)
 
         # Apply 2D Fourier transform to input feature maps
         x_fft = torch.fft.fft2(x_)
 
-        x_fft_real = x_fft.real.to(self.mps0)
+        x_fft_real = x_fft.real#.to(self.mps0)
         # Branch 1: 1x1 Convolution
         x1 = self.conv1(x_fft_real)
         x1 = self.bn1(x1)
@@ -166,7 +166,7 @@ class FourierBlock(nn.Module):
         # Add input feature maps to output feature maps (skip connection)
         # x_out = x + x_ifft.real #=------ cannot add throws error
         x_out = x_ifft.real
-        x_out = x_out.to(self.mps0)
+        # x_out = x_out.to(self.mps0)
 
         return x_out
 

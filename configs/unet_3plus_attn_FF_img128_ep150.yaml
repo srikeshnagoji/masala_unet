@@ -1,0 +1,72 @@
+MODEL:
+  NAME: unet_3plus_attn_FF_img128_ep150
+  MODEL_TYPE: UNet_3Plus_attn_FF
+
+  MODEL_CONFIG:
+    in_channels: 3
+    n_classes: 1
+    feature_scale: 4
+    is_deconv: True
+    is_batchnorm: True
+
+  PRETRAIN_CKPT: unet_3plus_attn_FF_img128_ep150
+
+SEED: 1234
+
+DATASET:
+  DATASET_LOADER: BrainMRIDataset
+  DATASET_CONFIG:
+    base_path: E:/Projects/Data-Science/MTech/Courses/16.Capstone-Projects/Data/kaggle_3m
+
+  DATASET_TRANSFORMS:
+    DATASET_TRANSFORM_NAME: Default
+    DATASET_TRANSFORM_CONFIG:
+      image_size: 128
+
+WANDB:
+  LOG_STEP_INTERVAL: 10
+  SAVE_OUTPUT_EPOCH_INTERVAL: 5
+
+TRAIN:
+  OUTPUT_DIR: "output"
+  MAX_EPOCHS: 150
+  BASE_LR: 0.05
+  BATCH_SIZE: 4
+
+  DETERMINISTIC: True
+  N_GPU: 1
+  USE_CHECKPOINT: False
+
+  TRAIN_VAL_SPLIT: 0.1
+
+  SAVE_INTERVAL: 1
+
+  OPTIM_NAME: Lion
+  OPTIM_CONFIG:
+    # learning_rate: 1e-04
+    learning_rate: 0.05
+    adam_beta1: 0.95
+    adam_beta2: 0.999
+    adam_weight_decay: 1e-06
+    adam_epsilon: 1e-08
+
+  ACCELERATOR_CONFIG:
+    REPORT_TO: wandb
+    GRADIENT_ACCUMULATION_STEPS: 4
+    MIXED_PRECISION: 'no'
+
+
+TEST:
+  OUTPUT_DIR: "test_log\\swin_tiny_patch4_window7_224_ep300"
+  LOG_OUTPUT_DIR: "test_log\\swin_tiny_patch4_window7_224_ep300\\log"
+
+  TRAIN_TEST_SPLIT: 0.12
+
+  DETERMINISTIC: True
+  N_GPU: 1
+  IS_SAVENII: True
+
+  ACCELERATOR_CONFIG:
+    REPORT_TO: wandb
+    GRADIENT_ACCUMULATION_STEPS: 4
+    MIXED_PRECISION: 'no'
