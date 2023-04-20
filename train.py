@@ -411,9 +411,9 @@ def main():
 
                 # Take an image snapshot somewhere in the middle of the complete loader..
 
-                if train_batch_counter < len(train_data_loader) / 2:
-                    img_snapshot = img
-                    mask_snapshot = mask
+                # if train_batch_counter < len(train_data_loader.dataset) / 2:
+                # img_snapshot = img
+                # mask_snapshot = mask
 
                 outputs = model(img)
                 out_cut = np.copy(outputs.data.cpu().numpy())
@@ -538,7 +538,7 @@ def main():
 
         # optimizer_to(optimizer, accelerator.device)
         if epoch % config.WANDB.SAVE_OUTPUT_EPOCH_INTERVAL == 0:
-            pred = model(img_snapshot)
+            pred = model(img)
             pred_out_cut = np.copy(pred.cpu().detach().numpy())
             pred_out_cut[np.nonzero(pred_out_cut < 0.5)] = 0.0
             pred_out_cut[np.nonzero(pred_out_cut >= 0.5)] = 1.0
@@ -549,9 +549,11 @@ def main():
                     wandb.log(
                         {
                             "img-mask-pred": [
-                                wandb.Image(img_snapshot[0, 0, :, :]),
-                                wandb.Image(mask_snapshot[0, 0, :, :]),
-                                wandb.Image(pred_out_cut[0, 0, :, :]),
+                                wandb.Image(img[0, int(img.shape[1] / 2), :, :]),
+                                wandb.Image(mask[0, int(img.shape[1] / 2), :, :]),
+                                wandb.Image(
+                                    pred_out_cut[0, int(img.shape[1] / 2), :, :]
+                                ),
                             ]
                         }
                     )
