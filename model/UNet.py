@@ -21,12 +21,12 @@ class UNet(nn.Module):
         is_batchnorm=True,
     ):
         super(UNet, self).__init__()
-        self.n_channels = n_channels
-        self.n_classes = n_classes
-        self.bilinear = bilinear
-        self.feature_scale = feature_scale
-        self.is_deconv = is_deconv
-        self.is_batchnorm = is_batchnorm
+        self.n_channels = int(n_channels)
+        self.n_classes = int(n_classes)
+        self.bilinear = bool(bilinear)
+        self.feature_scale = int(feature_scale)
+        self.is_deconv = bool(is_deconv)
+        self.is_batchnorm = bool(is_batchnorm)
         filters = [64, 128, 256, 512, 1024]
 
         # downsampling
