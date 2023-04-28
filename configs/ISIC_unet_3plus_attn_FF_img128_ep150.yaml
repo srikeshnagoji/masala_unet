@@ -9,15 +9,15 @@ MODEL:
     is_deconv: True
     is_batchnorm: True
 
-  PRETRAIN_CKPT: True
+  PRETRAIN_CKPT: False
 
 SEED: 1234
 
 DATASET:
   DATASET_LOADER: ISICDataset
   DATASET_CONFIG:
-    # base_path: "E:/Projects/Data-Science/MTech/Courses/16.Capstone-Projects/Swin-Unet-Generic/swin_unet/dataset/skin_lesion"
-    base_path: "/Users/srikeshnagoji/Documents/PythonWorkSpace/jupyter_lab_workspace/PES/final_thesis/dataset/ISIC_skin_converted"
+    base_path: "E:/Projects/Data-Science/MTech/Courses/16.Capstone-Projects/Swin-Unet-Generic/swin_unet/dataset/skin_lesion"
+    # base_path: "/Users/srikeshnagoji/Documents/PythonWorkSpace/jupyter_lab_workspace/PES/final_thesis/dataset/ISIC_skin_converted"
 
     # csv_file_name: ISBI2016_ISIC_Part3B_Training_GroundTruth.csv
     # img_folder_name: ISBI2016_ISIC_Part3B_Training_Data
@@ -36,7 +36,7 @@ TRAIN:
   OUTPUT_DIR: "output"
   MAX_EPOCHS: 150
   BASE_LR: 0.05
-  BATCH_SIZE: 4
+  BATCH_SIZE: 3
 
   DETERMINISTIC: True
   N_GPU: 1
@@ -46,13 +46,17 @@ TRAIN:
 
   SAVE_INTERVAL: 1
 
-  OPTIM_NAME: Lion
+  # OPTIM_NAME: Lion
+  # OPTIM_CONFIG:
+  #   learning_rate: 1e-03
+  #   adam_beta1: 0.95
+  #   adam_beta2: 0.999
+  #   adam_weight_decay: 1e-06
+  #   adam_epsilon: 1e-08
+  
+  OPTIM_NAME: SGD
   OPTIM_CONFIG:
     learning_rate: 1e-03
-    adam_beta1: 0.95
-    adam_beta2: 0.999
-    adam_weight_decay: 1e-06
-    adam_epsilon: 1e-08
 
   ACCELERATOR_CONFIG:
     REPORT_TO: wandb

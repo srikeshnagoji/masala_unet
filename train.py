@@ -6,11 +6,9 @@ import numpy as np
 import pandas as pd
 
 # import torchvision.transforms as transforms
-from torch.optim import AdamW, SGD
+# from torch.optim import AdamW, SGD
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from lion_pytorch import Lion
-from PIL import Image
-from .util.helper import DatasetPurpose
+from util.helper import DatasetPurpose
 import pickle
 
 import time
@@ -32,7 +30,9 @@ import time
 # from model.unet_inception_ff import InceptionUNetFF
 
 # from dataset.dataset_loaders import ISICDataset, GenericNpyDataset, BrainMRIDataset
-from metrics.diceMetrics import dice_coef_metric, compute_iou, DiceLoss
+from metrics.diceMetrics import dice_coef_metric, compute_iou
+from loss import SimpleDiceLoss, DiceCEMixLoss
+from torch.nn.modules.loss import CrossEntropyLoss
 from accelerate import Accelerator
 import wandb
 
@@ -48,7 +48,9 @@ from util.helper import get_args_config, optimizer_to, load_data
 
 # model_name = "unet_vanced"
 
-train_loss = DiceLoss()
+# dice_loss_obj = SimpleDiceLoss()
+# ce_loss_obj = CrossEntropyLoss()
+# dice_loss_swin = DiceLossSwin(n_classes=1)
 
 # Parse CLI arguments
 # def parse_args():
@@ -209,6 +211,8 @@ def main():
     np.random.seed(config.SEED)
     torch.manual_seed(config.SEED)
 
+    torch.cuda.empty_cache()
+
     checkpoint_dir = os.path.join(config.TRAIN.OUTPUT_DIR, file_name)
     os.makedirs(checkpoint_dir, exist_ok=True)
 
@@ -294,40 +298,61 @@ def main():
     #         * accelerator.num_processes
     #     )
 
-    # Initialize optimizer
-    optimizer = None
-    if config.TRAIN.OPTIM_NAME == "SGD":
-        print("Using SGD Optimizer.")
-        optimizer = SGD(
-            model.parameters(),
-            lr=float(str(config.TRAIN.OPTIM_CONFIG.learning_rate)),
-            momentum=0.9,
-            weight_decay=0.0001,
-        )
+    # Initialize Loss..
+    # Dynamically Load the Loss, based on the Config..
+    # 'from loss.DiceCEMixLoss import DiceCEMixLoss'
+    module = __import__(
+        name=f"loss.{config.TRAIN.LOSS_NAME}", fromlist=[f"{config.TRAIN.LOSS_NAME}"]
+    )
+    loss_obj = getattr(module, f"{config.TRAIN.LOSS_NAME}")()
 
-    elif config.TRAIN.OPTIM_NAME == "Lion":
-        print("Using LION Optimizer.")
-        optimizer = Lion(
-            model.parameters(),
-            lr=float(str(config.TRAIN.OPTIM_CONFIG.learning_rate)),
-            betas=(
-                float(str(config.TRAIN.OPTIM_CONFIG.adam_beta1)),
-                float(str(config.TRAIN.OPTIM_CONFIG.adam_beta2)),
-            ),
-            weight_decay=float(str(config.TRAIN.OPTIM_CONFIG.adam_weight_decay)),
-        )
-    elif config.TRAIN.OPTIM_NAME == "AdamW":
-        print("Using Adam Optimizer.")
-        optimizer = AdamW(
-            model.parameters(),
-            lr=float(str(config.TRAIN.OPTIM_CONFIG.learning_rate)),
-            betas=(
-                float(str(config.TRAIN.OPTIM_CONFIG.adam_beta1)),
-                float(str(config.TRAIN.OPTIM_CONFIG.adam_beta2)),
-            ),
-            weight_decay=float(str(config.TRAIN.OPTIM_CONFIG.adam_weight_decay)),
-            eps=float(str(config.TRAIN.OPTIM_CONFIG.adam_epsilon)),
-        )
+    # Initialize optimizer
+    # Dynamically Load the Optimizer, based on the Config..
+    # 'from loss.DiceCEMixLoss import DiceCEMixLoss'
+    module = __import__(
+        name=f"{config.TRAIN.OPTIM_PACKAGE}", fromlist=[f"{config.TRAIN.OPTIM_NAME}"]
+    )
+    optimizer = getattr(module, f"{config.TRAIN.OPTIM_NAME}")(model.parameters(),
+        **vars(config.TRAIN.OPTIM_CONFIG)
+    )
+
+    # Manual Init (OLD)
+    # optimizer = None
+    # from torch.optim import SGD
+    
+
+    # if config.TRAIN.OPTIM_NAME == "SGD":
+    #     print("Using SGD Optimizer.")
+    #     optimizer = SGD(
+    #         model.parameters(),
+    #         lr=float(str(config.TRAIN.OPTIM_CONFIG.lr)),
+    #         momentum=0.9,
+    #         weight_decay=0.0001,
+    #     )
+
+    # elif config.TRAIN.OPTIM_NAME == "Lion":
+    #     print("Using LION Optimizer.")
+    #     optimizer = Lion(
+    #         model.parameters(),
+    #         lr=float(str(config.TRAIN.OPTIM_CONFIG.learning_rate)),
+    #         betas=(
+    #             float(str(config.TRAIN.OPTIM_CONFIG.adam_beta1)),
+    #             float(str(config.TRAIN.OPTIM_CONFIG.adam_beta2)),
+    #         ),
+    #         weight_decay=float(str(config.TRAIN.OPTIM_CONFIG.adam_weight_decay)),
+    #     )
+    # elif config.TRAIN.OPTIM_NAME == "AdamW":
+    #     print("Using Adam Optimizer.")
+    #     optimizer = AdamW(
+    #         model.parameters(),
+    #         lr=float(str(config.TRAIN.OPTIM_CONFIG.learning_rate)),
+    #         betas=(
+    #             float(str(config.TRAIN.OPTIM_CONFIG.adam_beta1)),
+    #             float(str(config.TRAIN.OPTIM_CONFIG.adam_beta2)),
+    #         ),
+    #         weight_decay=float(str(config.TRAIN.OPTIM_CONFIG.adam_weight_decay)),
+    #         eps=float(str(config.TRAIN.OPTIM_CONFIG.adam_epsilon)),
+    #     )
 
     # TRAIN MODEL
     counter = 0
@@ -346,24 +371,25 @@ def main():
     try:
         if bool(config.MODEL.PRETRAIN_CKPT):
             print(f"Loading model from previous checkpoint: {file_name}_cur.pt'")
-            load_path = str(f"output/{file_name}/{file_name}_cur.pt")
+            torch_checkpoint_load_path = str(f"output/{file_name}/{file_name}_cur.pt")
+            wandb_checkpoint_load_path = str(f"output/{file_name}/{file_name}_wandb_cur.pt")
 
-            if os.path.exists(load_path) == False:
+            if os.path.exists(torch_checkpoint_load_path) == False:
                 raise Exception("Checkpoint does not exist, conitnuing..")
 
             # save_dict = torch.load(load_path)
             # print(wandb.restore(load_path))
             # print(json.load(open(load_path, encoding='utf-8')))
-            with open(load_path, "rb") as f:
+            with open(torch_checkpoint_load_path, "rb") as f:
                 save_dict = torch.load(f, pickle_module=pickle)
                 # print(save_dict)
-            wandb.restore(load_path)
+            wandb.restore(wandb_checkpoint_load_path)
             model.load_state_dict(save_dict["model_state_dict"])
             optimizer.load_state_dict(save_dict["optimizer_state_dict"])
-            cur_epoch = save_dict["epoch"] + 1
+            cur_epoch = save_dict["epoch"]
             cur_loss = save_dict["loss"]
 
-            accelerator.print(f"Loaded from {load_path}")
+            accelerator.print(f"Loaded from {torch_checkpoint_load_path}")
     except Exception as e:
         cur_epoch = 0
         print(f"Failed: {str(e)}")
@@ -385,6 +411,8 @@ def main():
     img_snapshot = None
     mask_snapshot = None
 
+    
+
     # accelerator.log({"Dice loss": 0})
     # accelerator.log({"Train IOU": 0})
 
@@ -400,7 +428,15 @@ def main():
         train_iou = []
         # print(f'Checkpoint 5 :{time.time()-start}')
         print(f"Epoch {epoch + 1}/{config.TRAIN.MAX_EPOCHS}")
+
+        rand_img_batch = 0
+        rand_batch_no = 0
+
         train_batch_counter = 0
+
+        # Recalculate Snapshot..
+        rand_batch_no = int(np.random.randint(0, len(train_data_loader)))
+        # print(f'No of Batches: {len(train_data_loader)}, Batch No: {rand_batch_no}')
         for img, mask in tqdm(train_data_loader):
             # print(f'Checkpoint 6 :{time.time()-start}')
 
@@ -408,16 +444,20 @@ def main():
                 # print(img.size(), mask.size())
                 img = img.to(accelerator.device)
                 mask = mask.to(accelerator.device)
-
+                
+                # print(img.cpu().numpy().min(), img.cpu().numpy().max())
+                # print(mask.cpu().numpy().min(), mask.cpu().numpy().max())
+                
                 # Take an image snapshot somewhere in the middle of the complete loader..
 
-                # if train_batch_counter < len(train_data_loader.dataset) / 2:
-                # img_snapshot = img
-                # mask_snapshot = mask
+                if train_batch_counter == rand_batch_no:
+                    img_snapshot = img
+                    mask_snapshot = mask
 
                 outputs = model(img)
+                # print(outputs.cpu().numpy().min(), outputs.cpu().numpy().max())
+                # break
                 out_cut = np.copy(outputs.data.cpu().numpy())
-                # print(out_cut.shape, out_cut.min(), out_cut.max())
 
                 out_cut[np.nonzero(out_cut < 0.5)] = 0.0
                 out_cut[np.nonzero(out_cut >= 0.5)] = 1.0
@@ -425,17 +465,34 @@ def main():
                 train_dice = dice_coef_metric(out_cut, mask.data.cpu().numpy())
                 train_iou.append(train_dice)
 
-                loss = train_loss(outputs, mask)
-                losses.append(loss.item())
+                # For other UNet, normal losses..
+                # loss = dice_loss_obj(outputs, mask)
+
+                # Try combining lossses..
+                # dice_loss = dice_loss_obj(outputs, mask)
+                # ce_loss = ce_loss_obj(outputs, mask)
+                # loss = 0.6 * ce_loss + 0.4 * dice_loss
+
+                # Generic Config Loss..
+                loss = loss_obj(outputs, mask)
+
+                # For Swin..
+                
+                losses.append(float(loss.item()))
+                # print(f"Loss: {loss.item()} :: Losses mean : {np.array(losses).mean()}")
 
                 # loss = diffusion(mask, img)
-                # if train_batch_counter % config.WANDB.LOG_STEP_INTERVAL == 0:
+                # if train_batch_counte % config.WANDB.LOG_STEP_INTERVAL == 0:
                 # accelerator.log({"Dice loss": loss.item()})  # Log loss to wandb
                 # accelerator.log({"Train IOU": train_dice})  # Log IOU to wandb
 
-                accelerator.backward(loss)
-                optimizer.step()
+                # accelerator.backward(loss)
+                # optimizer.step()
+                # optimizer.zero_grad()
+                
                 optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
                 train_batch_counter += 1
 
@@ -444,7 +501,7 @@ def main():
         running_loss += loss.item() * img.size(0)
         counter += 1
         epoch_loss = running_loss / len(train_data_loader)
-        print("Epoch Loss : {:.4f}".format(epoch_loss))
+        # print("Epoch Loss : {:.4f}".format(epoch_loss))
 
         # print(f'Checkpoint 7 :{time.time()-start}')
 
@@ -471,12 +528,12 @@ def main():
 
         scheduler.step(mean_loss)  # TODO: uncomment this
 
-        accelerator.log(
+        wandb.log(
             {
                 "Mean DICE on train set": float(mean_dice_train),
                 "Mean DICE on validation set": float(val_mean_iou),
                 "Mean Dice loss (training epoch)": float(mean_loss),
-            }
+            },step = epoch
         )
         # accelerator.log({"Mean DICE on validation set": float(val_mean_iou)})
         # accelerator.log({"Mean Dice loss (training epoch)": float(mean_loss)})
@@ -486,13 +543,14 @@ def main():
         # SAVE BEST MODEL..
         if epoch_loss < min_epoch_dice_loss:
             if epoch % config.TRAIN.SAVE_INTERVAL == 0:
-                checkpoint_path = os.path.join(
+                torch_best_checkpoint_path = os.path.join(
                     config.TRAIN.OUTPUT_DIR,
                     file_name,
                     f"{file_name}_best.pt",
                 )
 
-                with open(checkpoint_path, "wb") as f:
+                # Checkpoint for Torch..
+                with open(torch_best_checkpoint_path, "wb") as f:
                     torch.save(
                         {
                             "epoch": epoch,
@@ -504,8 +562,7 @@ def main():
                         f,
                         pickle_module=pickle,
                     )
-
-                wandb.save(checkpoint_path)
+                # wandb.save(torch_best_checkpoint_path)
 
             min_epoch_dice_loss = epoch_loss
 
@@ -513,13 +570,19 @@ def main():
 
         # BACKUP SAVE (current model..)
         if epoch % config.TRAIN.SAVE_INTERVAL == 0:
-            checkpoint_path = os.path.join(
+            torch_cur_checkpoint_path = os.path.join(
                 config.TRAIN.OUTPUT_DIR,
                 file_name,
                 f"{file_name}_cur.pt",
             )
+            wandb_cur_checkpoint_path = os.path.join(
+                config.TRAIN.OUTPUT_DIR,
+                file_name,
+                f"{file_name}_wandb_cur.pt",
+            )
 
-            with open(checkpoint_path, "wb") as f:
+            # Save Checkpoint for Torch only..
+            with open(torch_cur_checkpoint_path, "wb") as f:
                 torch.save(
                     {
                         "epoch": epoch,
@@ -531,17 +594,29 @@ def main():
                     f,
                     pickle_module=pickle,
                 )
+            # Save Checkpoint for WandB
+            with open(wandb_cur_checkpoint_path, "wb") as f:
+                torch.save(
+                    {
+                        "epoch": epoch,
+                        "loss": mean_loss,
+                    },
+                    f,
+                    pickle_module=pickle,
+                )
 
-            wandb.save(checkpoint_path)
+            wandb.save(wandb_cur_checkpoint_path)
 
         # print(f'Checkpoint 12 :{time.time()-start}')
 
         # optimizer_to(optimizer, accelerator.device)
         if epoch % config.WANDB.SAVE_OUTPUT_EPOCH_INTERVAL == 0:
-            pred = model(img)
+            pred = model(img_snapshot)
             pred_out_cut = np.copy(pred.cpu().detach().numpy())
             pred_out_cut[np.nonzero(pred_out_cut < 0.5)] = 0.0
             pred_out_cut[np.nonzero(pred_out_cut >= 0.5)] = 1.0
+            
+            rand_index = np.random.randint(0, img.shape[0])
 
             for tracker in accelerator.trackers:
                 if tracker.name == "wandb":
@@ -549,13 +624,13 @@ def main():
                     wandb.log(
                         {
                             "img-mask-pred": [
-                                wandb.Image(img[0, int(img.shape[1] / 2), :, :]),
-                                wandb.Image(mask[0, int(img.shape[1] / 2), :, :]),
+                                wandb.Image(img_snapshot[rand_index, 0, :, :]),
+                                wandb.Image(mask_snapshot[rand_index, 0, :, :]),
                                 wandb.Image(
-                                    pred_out_cut[0, int(img.shape[1] / 2), :, :]
+                                    pred_out_cut[rand_index, 0, :, :]
                                 ),
                             ]
-                        }
+                        },step = epoch
                     )
 
         # print(f'Checkpoint 13 :{time.time()-start}')

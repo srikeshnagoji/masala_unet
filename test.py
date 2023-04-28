@@ -13,7 +13,7 @@ from lion_pytorch import Lion
 from metrics.diceMetrics import dice_coef_metric, compute_iou, DiceLoss
 from accelerate import Accelerator
 import wandb
-from .util.helper import DatasetPurpose, load_data
+from util.helper import DatasetPurpose, load_data
 from torch import backends
 
 import torch.nn as nn
@@ -237,7 +237,8 @@ def main():
             # loss = train_loss(outputs, mask)
             # losses.append(loss.item())
 
-            accelerator.log({"Test IOU": test_dice})  # Log IOU to wandb
+            # accelerator.log({"Test IOU": test_dice})  # Log IOU to wandb
+            print({"Test IOU": test_dice})
             # accelerator.backward(loss)
             # optimizer.step()
             # optimizer.zero_grad()
@@ -249,7 +250,8 @@ def main():
     # accelerator.log({"Epoch Loss": epoch_loss})
 
     mean_dice_test = np.array(test_iou).mean()
-    accelerator.log({"Mean DICE on test set": mean_dice_test})
+    # accelerator.log({"Mean DICE on test set": mean_dice_test})
+    print({"Mean DICE on test set": mean_dice_test})
 
     # val_mean_iou = None
     # if val_data_generator is not None:
@@ -258,8 +260,6 @@ def main():
 
     # mean_loss = np.array(losses).mean()
     # accelerator.log({"Mean Dice loss (training epoch)": mean_loss})
-
-    print("Mean DICE on test:", mean_dice_test)
 
     # scheduler.step(mean_loss)  # TODO: uncomment this
 

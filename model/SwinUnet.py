@@ -23,11 +23,13 @@ from torch.nn.modules.utils import _pair
 from scipy import ndimage
 # from .swin_transformer_unet_skip_expand_decoder_sys import SwinTransformerSys
 
+pr_output = False
+
 class SwinUnet(nn.Module):
     def __init__(self, 
                  img_size=224, 
                  num_classes=21843, 
-                 swin_trans_patch_size=4, 
+                 swin_patch_size=4,
                  window_size=7,
                  drop_path_rate=0.1,
                  use_checkpoint=False,
@@ -39,14 +41,14 @@ class SwinUnet(nn.Module):
         self.num_classes = int(num_classes)
         self.zero_head = bool(zero_head)
         self.vis = bool(vis)
-        self.swin_trans_patch_size = int(swin_trans_patch_size)
+        self.swin_patch_size = int(swin_patch_size)
         self.window_size = int(window_size)
         self.drop_path_rate = float(drop_path_rate)
         self.final_upsample = str(final_upsample)
         self.use_checkpoint = bool(use_checkpoint)
 
         self.swin_unet = SwinTransformerSys(img_size=self.img_size,
-                                patch_size=int(swin_trans_patch_size),
+                                patch_size=int(swin_patch_size),
                                 # in_chans=int(config.MODEL.SWIN.IN_CHANS),
                                 num_classes=int(self.num_classes),
                                 # embed_dim=int(config.MODEL.SWIN.EMBED_DIM),
@@ -397,6 +399,7 @@ class PatchMerging(nn.Module):
         super().__init__()
         self.input_resolution = input_resolution
         self.dim = dim
+        self.reduction_up = nn.Linear(dim, 4 * dim, bias=False)
         self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
         self.norm = norm_layer(4 * dim)
 
@@ -409,18 +412,37 @@ class PatchMerging(nn.Module):
         assert L == H * W, "input feature has wrong size"
         assert H % 2 == 0 and W % 2 == 0, f"x size ({H}*{W}) are not even."
 
-        x = x.view(B, H, W, C)
+        # print(f'Patch Merging Input: {x.cpu().detach().numpy().shape}')
 
-        x0 = x[:, 0::2, 0::2, :]  # B H/2 W/2 C
-        x1 = x[:, 1::2, 0::2, :]  # B H/2 W/2 C
-        x2 = x[:, 0::2, 1::2, :]  # B H/2 W/2 C
-        x3 = x[:, 1::2, 1::2, :]  # B H/2 W/2 C
-        x = torch.cat([x0, x1, x2, x3], -1)  # B H/2 W/2 4*C
-        x = x.view(B, -1, 4 * C)  # B H/2*W/2 4*C
+        # Patch Merging..
+        # x = x.view(B, H, W, C)
+        # print(f'Patch Merging Prepared: {x.cpu().detach().numpy().shape}')
+        # x0 = x[:, 0::2, 0::2, :]  # B H/2 W/2 C
+        # x1 = x[:, 1::2, 0::2, :]  # B H/2 W/2 C
+        # x2 = x[:, 0::2, 1::2, :]  # B H/2 W/2 C
+        # x3 = x[:, 1::2, 1::2, :]  # B H/2 W/2 C
+        # # B H/2 W/2 4*C
+        # x = torch.cat([x0, x1, x2, x3], -1)
+        # # print(f'Patch Merging 4 parts resolution 1: {x0.cpu().detach().numpy().shape}')
+        # # print(f'Patch Merging 4 parts resolution 1: {x1.cpu().detach().numpy().shape}')
+        # # print(f'Patch Merging 4 parts resolution 1: {x2.cpu().detach().numpy().shape}')
+        # # print(f'Patch Merging 4 parts resolution 1: {x3.cpu().detach().numpy().shape}')
+        # x = x.view(B, -1, 4 * C)
+        # # print(f'Patch Merging After Cat Reshape: {x.cpu().detach().numpy().shape}')
+        # x = self.norm(x)
+        # # print(f'Patch Merging After Norm: {x.cpu().detach().numpy().shape}')
+        # x = self.reduction(x)
+        # # print(f'Patch Merging After Linear: {x.cpu().detach().numpy().shape}')
 
+        # Bilinear Interpolation..
+        x = x.view(B, C, H, W)
+        # print(f'Patch Merging Prepared: {x.cpu().detach().numpy().shape}')
+        x = F.interpolate(x,scale_factor=0.5, mode='bilinear')
+        x = x.view(B, -1, C)  # B H/2*W/2 4*C
+        x = self.reduction_up(x)
         x = self.norm(x)
         x = self.reduction(x)
-
+        
         return x
 
     def extra_repr(self) -> str:
@@ -437,6 +459,7 @@ class PatchExpand(nn.Module):
         super().__init__()
         self.input_resolution = input_resolution
         self.dim = dim
+        self.reduction_down = nn.Linear(dim, int(dim/2), bias=False) if dim_scale==2 else nn.Identity()
         self.expand = nn.Linear(dim, 2*dim, bias=False) if dim_scale==2 else nn.Identity()
         self.norm = norm_layer(dim // dim_scale)
 
@@ -445,14 +468,39 @@ class PatchExpand(nn.Module):
         x: B, H*W, C
         """
         H, W = self.input_resolution
-        x = self.expand(x)
+        # print(f'Patch Expand Input: {x.cpu().detach().numpy().shape}')
+        
+        # Patch Expanding..
+        # x = self.expand(x)
+
+        # print(f'Patch Expand After Linear: {x.cpu().detach().numpy().shape}')
         B, L, C = x.shape
         assert L == H * W, "input feature has wrong size"
 
-        x = x.view(B, H, W, C)
-        x = rearrange(x, 'b h w (p1 p2 c)-> b (h p1) (w p2) c', p1=2, p2=2, c=C//4)
-        x = x.view(B,-1,C//4)
+        # Patch Expanding..
+        # x = x.view(B, H, W, C)
+        # # print(f'Patch Expand Prepare: {x.cpu().detach().numpy().shape}')
+        # x = rearrange(x, 'b h w (p1 p2 c)-> b (h p1) (w p2) c', p1=2, p2=2, c=C//4)
+        # # print(f'Patch Expand Rearrange: {x.cpu().detach().numpy().shape}')
+        # x = x.view(B,-1,C//4)
+        # # print(f'Patch Expand Reshape: {x.cpu().detach().numpy().shape}')
+
+        # Bilinear Interpolation..
+        # print(f'Patch Expand Input 2: {x.cpu().detach().numpy().shape}')
+        x = x.view(B, C, H, W)
+        # print(f'Patch Expand Reshape 1: {x.cpu().detach().numpy().shape}')
+        x = F.interpolate(x,scale_factor=2, mode='bilinear')
+        # print(f'Patch Expand Prepare: {x.cpu().detach().numpy().shape}')
+        # x = rearrange(x, 'b c h w-> b h w c', p1=0.25, c=C*2)
+        # print(f'Patch Expand Rearrange: {x.cpu().detach().numpy().shape}')
+        x = x.view(B,-1,C)
+        # print(f'Patch Expand Reshape 2: {x.cpu().detach().numpy().shape}, {self.dim}')
+        x = self.reduction_down(x)
+        # print(f'Patch Expand Reduction: {x.cpu().detach().numpy().shape}')
+
+
         x= self.norm(x)
+        # print(f'Patch Expand After Norm: {x.cpu().detach().numpy().shape}')
 
         return x
 
@@ -471,15 +519,31 @@ class FinalPatchExpand_X4(nn.Module):
         x: B, H*W, C
         """
         H, W = self.input_resolution
+        # print(f'Stage FinalPatchExpand_X4 Input: {x.cpu().detach().numpy().shape}')
+
+        # Patch Expanding X4..
         x = self.expand(x)
+
+        # print(f'Stage FinalPatchExpand_X4 After Linear: {x.cpu().detach().numpy().shape}')
         B, L, C = x.shape
         assert L == H * W, "input feature has wrong size"
 
+        # Patch Expanding X4..
         x = x.view(B, H, W, C)
+        # print(f'Stage FinalPatchExpand_X4 After Reshape: {x.cpu().detach().numpy().shape}')
         x = rearrange(x, 'b h w (p1 p2 c)-> b (h p1) (w p2) c', p1=self.dim_scale, p2=self.dim_scale, c=C//(self.dim_scale**2))
+        # print(f'Stage FinalPatchExpand_X4 After Rearrange: {x.cpu().detach().numpy().shape}, self.dim_scale: {self.dim_scale}')
         x = x.view(B,-1,self.output_dim)
-        x= self.norm(x)
+        # print(f'Stage FinalPatchExpand_X4 After Reshape 2: {x.cpu().detach().numpy().shape}')
 
+
+        # Bilinear Interpolation X4..
+        # x = x.view(B, C, H, W)
+        # x = F.interpolate(x,scale_factor=4, mode='bilinear')
+        # x = x.view(B,-1,C)
+
+        x= self.norm(x)
+        # print(f'Stage FinalPatchExpand_X4 Norm: {x.cpu().detach().numpy().shape}')
         return x
 
 class BasicLayer(nn.Module):
@@ -531,13 +595,16 @@ class BasicLayer(nn.Module):
             self.downsample = None
 
     def forward(self, x):
+        # print(f'Basic Layer Input: {x.cpu().detach().numpy().shape}')
         for blk in self.blocks:
             if self.use_checkpoint:
                 x = checkpoint.checkpoint(blk, x)
             else:
                 x = blk(x)
+        # print(f'Basic Layer after swin: {x.cpu().detach().numpy().shape}')
         if self.downsample is not None:
             x = self.downsample(x)
+        # print(f'Basic Layer after downsample: {x.cpu().detach().numpy().shape}')
         return x
 
     def extra_repr(self) -> str:
@@ -593,7 +660,7 @@ class BasicLayer_up(nn.Module):
                                  norm_layer=norm_layer)
             for i in range(depth)])
 
-        # patch merging layer
+        # patch expanding layer
         if upsample is not None:
             self.upsample = PatchExpand(input_resolution, dim=dim, dim_scale=2, norm_layer=norm_layer)
         else:
@@ -684,8 +751,8 @@ class SwinTransformerSys(nn.Module):
     """
 
     def __init__(self, img_size=224, patch_size=4, in_chans=3, num_classes=1000,
-                 embed_dim=96, depths=[2, 2, 2, 2], depths_decoder=[1, 2, 2, 2], num_heads=[3, 6, 12, 24],
-                 window_size=7, mlp_ratio=4., qkv_bias=True, qk_scale=None,
+                 embed_dim=192, depths=[2, 2, 2, 2], depths_decoder=[2, 2, 2, 1], num_heads=[4, 8, 16, 32],#num_heads=[3, 6, 12, 24],
+                 window_size=7, mlp_ratio=12., qkv_bias=True, qk_scale=None,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
                  norm_layer=nn.LayerNorm, ape=False, patch_norm=True,
                  use_checkpoint=False, final_upsample="expand_first", **kwargs):
@@ -694,6 +761,7 @@ class SwinTransformerSys(nn.Module):
         print("SwinTransformerSys expand initial----depths:{};depths_decoder:{};drop_path_rate:{};num_classes:{}".format(depths,
         depths_decoder,drop_path_rate,num_classes))
 
+        self.img_size = int(img_size)
         self.num_classes = num_classes
         self.num_layers = len(depths)
         self.embed_dim = embed_dim
@@ -771,7 +839,8 @@ class SwinTransformerSys(nn.Module):
 
         if self.final_upsample == "expand_first":
             print("---final upsample expand_first---")
-            self.up = FinalPatchExpand_X4(input_resolution=(img_size//patch_size,img_size//patch_size),dim_scale=4,dim=embed_dim)
+            # self.up = FinalPatchExpand_X4(input_resolution=(img_size//patch_size,img_size//patch_size),dim_scale=4,dim=embed_dim)
+            self.up = FinalPatchExpand_X4(input_resolution=(img_size//patch_size,img_size//patch_size),dim_scale=patch_size,dim=embed_dim)
             self.output = nn.Conv2d(in_channels=embed_dim,out_channels=self.num_classes,kernel_size=1,bias=False)
 
         self.apply(self._init_weights)
@@ -795,32 +864,46 @@ class SwinTransformerSys(nn.Module):
 
     #Encoder and Bottleneck
     def forward_features(self, x):
+        # print(f'Stage 1: {x.cpu().detach().numpy().shape}')
         x = self.patch_embed(x)
+        # print(f'Stage 2: {x.cpu().detach().numpy().shape}')
         if self.ape:
             x = x + self.absolute_pos_embed
         x = self.pos_drop(x)
+        # print(f'Stage 3: {x.cpu().detach().numpy().shape}')
         x_downsample = []
 
         for layer in self.layers:
             x_downsample.append(x)
             x = layer(x)
+            # print(f'Stage Loop: {x.cpu().detach().numpy().shape}')
 
+        # print(f'Stage 4: {x.cpu().detach().numpy().shape}')
         x = self.norm(x)  # B L C
-  
+
+        # print(f'Stage 5: {x.cpu().detach().numpy().shape}')
+
         return x, x_downsample
 
     #Dencoder and Skip connection
     def forward_up_features(self, x, x_downsample):
+        # print(f'Stage Up 1: {x.cpu().detach().numpy().shape}')
         for inx, layer_up in enumerate(self.layers_up):
             if inx == 0:
                 x = layer_up(x)
+                # print(f'Stage Up Loop 1: {x.cpu().detach().numpy().shape}')
             else:
+                # print(f'Stage Up Loop 2: Catting {x.cpu().detach().numpy().shape} and {x_downsample[3-inx].cpu().detach().numpy().shape}')
                 x = torch.cat([x,x_downsample[3-inx]],-1)
+                # print(f'Stage Up Loop 2 Catted: {x.cpu().detach().numpy().shape}')
                 x = self.concat_back_dim[inx](x)
+                # print(f'Stage Up Loop 2 ConCatted: {x.cpu().detach().numpy().shape}')
                 x = layer_up(x)
+                # print(f'Stage Up Loop 2 Layer Upped: {x.cpu().detach().numpy().shape}')
 
         x = self.norm_up(x)  # B L C
   
+        # print(f'Stage Up 3: {x.cpu().detach().numpy().shape}')
         return x
 
     def up_x4(self, x):
@@ -829,17 +912,32 @@ class SwinTransformerSys(nn.Module):
         assert L == H*W, "input features has wrong size"
 
         if self.final_upsample=="expand_first":
+            # print(f'Stage Upx4 Input: {x.cpu().detach().numpy().shape}')
             x = self.up(x)
+            # print(f'Stage Upx4 Upped: {x.cpu().detach().numpy().shape}')
             x = x.view(B,4*H,4*W,-1)
+            # print(f'Stage Upx4 Rearranged: {x.cpu().detach().numpy().shape}')
             x = x.permute(0,3,1,2) #B,C,H,W
+            # print(f'Stage Upx4 Permuted: {x.cpu().detach().numpy().shape}')
             x = self.output(x)
+            # print(f'Stage Upx4 Conv Output: {x.cpu().detach().numpy().shape}')
             
         return x
 
     def forward(self, x):
         x, x_downsample = self.forward_features(x)
         x = self.forward_up_features(x,x_downsample)
+        # print(f'Stage Up Output: {x.cpu().detach().numpy().shape}')
         x = self.up_x4(x)
+        # print(f'Stage Upx4 Final: {x.cpu().detach().numpy().shape}')
+
+        # If the input resolutions dont match, downsample by (4 / patch size)
+        # print(f'Comparing: {x.cpu().detach().numpy().shape}  {(self.img_size,self.img_size)}')
+        # downsampling_scale = x.cpu().detach().numpy().shape[2:][0] / self.img_size
+        # if x.cpu().detach().numpy().shape[2:] != (self.img_size,self.img_size):
+
+        x = F.interpolate(x,self.img_size,mode='bilinear')
+        # print(f'Output: {x.cpu().detach().numpy().shape}')
         return x
 
     def flops(self):

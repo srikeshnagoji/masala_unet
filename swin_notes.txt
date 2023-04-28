@@ -1,0 +1,116 @@
+SWIN UNET:
+
+	Embed Dim should be divisible by all the values in num_heads
+
+SWIN UNET DIMENSIONS:
+
+ENCODER:
+
+Input: 					(4, 3, 128, 128)		Patch Size: 4, hence, 128/4 * 128/4 = 32*32 = 1024 tokens
+
+Linear/Patch Embedding: (4, 1024, 96)
+
+Pos Drop (Dropout): 	(4, 1024, 96)	
+
+(Skip Connection 1 appended)
+
+Swin Layer 1: 			
+	Swin Layer x2:		(4, 1024, 96)
+	Patch Merging:		
+		Input:			(4, 1024, 96)
+		Reshape:		(4, 32, 32, 96)
+		Slice x4 Cat:	(4, 16, 16, 96) x 4 (Concat in dim -1)= (4, 16, 16, 384)
+		Cat Reshape:	(4, 256, 384)
+		Norm:			(4, 256, 384)
+		Linear Layer:	(4, 256, 192)
+
+(Skip Connection 2 appended)
+
+Swin Layer 2: 			
+	Swin Layer x2:		(4, 256, 192)
+	Patch Merging:		
+		Input:			(4, 256, 192)
+		Reshape:		(4, 16, 16, 192)
+		Slice x4 Cat:	(4, 8, 8, 192) x 4 (Concat in dim -1)= (4, 8, 8, 768)
+		Cat Reshape:	(4, 64, 768)
+		Norm:			(4, 64, 768)
+		Linear Layer:	(4, 64, 384)
+
+(Skip Connection 3 appended)
+
+Swin Layer 3: 			
+	Swin Layer x2:		(4, 64, 384)
+	Patch Merging:		
+		Input:			(4, 64, 384)
+		Reshape:		(4, 8, 8, 384)
+		Slice x4 Cat:	(4, 4, 4, 384) x 4 (Concat in dim -1)= (4, 4, 4, 1536)
+		Cat Reshape:	(4, 16, 1536)
+		Norm:			(4, 16, 1536)
+		Linear Layer:	(4, 16, 768)
+
+(Skip Connection 4 appended) (never used)
+
+Swin Layer 4 (Bottleneck):
+	Swin Layer x2:		(4, 16, 768)
+	# No Patch Merging in loop here (Skipped in code)
+
+Norm:					(4, 16, 768)
+
+
+
+
+DECODER:
+
+Input:							(4, 16, 768)
+
+Patch Expand (no concat):
+	Input:				(4, 16, 768)
+	Linear Layer:		(4, 16, 1536)
+	Reshape:			(4, 4, 4, 1536)
+	Rearrange:			(4, 8, 8, 384)
+	Reshape:			(4, 64, 384)
+	Norm:				(4, 64, 384)
+
+Swin Layer Up 1:
+	Catting Skip 				(4, 64, 384) + (4, 64, 384) = (4, 64, 768)
+	ConCatted (Linear):			(4, 64, 384)
+	Layer Up (Patch Expand):
+		Input:				(4, 64, 384)
+		Linear Layer:		(4, 64, 768)
+		Reshape:			(4, 8, 8, 768)
+		Rearrange:			(4, 16, 16, 192)
+		Reshape:			(4, 256, 192)
+		Norm:				(4, 256, 192)
+
+Swin Layer Up 2:				
+	Catting Skip 				(4, 256, 192) + (4, 256, 192) = (4, 256, 384)
+	ConCatted (Linear):			(4, 256, 192)			
+	Layer Up (Patch Expand):
+		Input:				(4, 256, 192)
+		Linear Layer:		(4, 256, 384)
+		Reshape:			(4, 16, 16, 384)
+		Rearrange:			(4, 32, 32, 96)
+		Reshape:			(4, 1024, 96)
+		Norm:				(4, 1024, 96)
+	
+Swin Layer Up 3:				(4, 1024, 96)
+	Catting Skip 				(4, 1024, 96) + (4, 1024, 96) = (4, 1024, 192)
+	ConCatted (Linear):			(4, 1024, 96)
+	(Layer Up Disabled..)
+
+Norm:							(4, 1024, 96)
+
+UP X4 :
+
+Input:							(4, 1024, 96)
+PatchExpandx4:
+	Input:						(4, 1024, 96)
+	Linear Layer:				(4, 1024, 1536)
+	Reshape:					(4, 32, 32, 1536)
+	Rearrange:					(4, 128, 128, 96)
+	Reshape:					(4, 16384, 96)
+	Norm:						(4, 16384, 96)
+	
+Rearrange:						(4, 128, 128, 96)
+Permuted:						(4, 96, 128, 128)
+Conv Output:					(4, 1, 128, 128)
