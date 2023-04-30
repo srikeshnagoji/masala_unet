@@ -15,6 +15,6 @@ class DiceCEMixLoss(nn.Module):
         dice_loss = dice_loss_obj(inputs, targets)
         ce_loss = ce_loss_obj(inputs, targets)
 
-        loss = 0.6 * ce_loss + 0.4 * dice_loss
+        loss = 0.5 * ce_loss + 0.5 * dice_loss
 
         return loss

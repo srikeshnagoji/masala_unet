@@ -52,6 +52,12 @@ accelerate launch train.py --cfg configs/ISIC_unet_3plus_attn_FF_img128_ep150.ya
 accelerate launch train.py --cfg configs/ISIC_SwinUNet_patch4_window7_img224_ep150.yaml
 ```
 
+### Test Commands:
+```bash
+accelerate launch test.py --cfg configs/ISIC_UNet_img128_ep150.yaml
+accelerate launch test.py --cfg configs/ISIC_SwinUNet_img128_ep150.yaml
+```
+
 
 ### Sam's Competetors for SwinUnet:
 ```bash

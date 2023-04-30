@@ -1,13 +1,13 @@
 MODEL:
   # NAME: ISIC_unet_3plus_attn_FF_img128_ep150
-  MODEL_TYPE: AttentionUNet
+  MODEL_TYPE: InceptionUNet
 
   MODEL_CONFIG:
-    n_classes: 1
-    in_channel: 3
-    out_channel: 1
+    n_channels: 3
+    n_classes: 1 
+    bilinear: True
 
-  PRETRAIN_CKPT: True
+  PRETRAIN_CKPT: False
 
 SEED: 1234
 
@@ -17,7 +17,6 @@ DATASET:
     base_path: "E:/Projects/Data-Science/MTech/Courses/16.Capstone-Projects/Swin-Unet-Generic/swin_unet/dataset/skin_lesion"
     # base_path: "/Users/srikeshnagoji/Documents/PythonWorkSpace/jupyter_lab_workspace/PES/final_thesis/dataset/ISIC_skin_converted"
     subset_count: -1
-
   # DATASET_LOADER: BrainMRIDataset
   # DATASET_CONFIG:
   #   base_path: E:/Projects/Data-Science/MTech/Courses/16.Capstone-Projects/Data/kaggle_3m
@@ -46,6 +45,8 @@ TRAIN:
 
   SAVE_INTERVAL: 1
 
+  LOSS_NAME: SimpleDiceLoss
+
   # OPTIM_NAME: Lion
   # OPTIM_CONFIG:
   #   learning_rate: 1e-03
@@ -53,9 +54,12 @@ TRAIN:
   #   adam_beta2: 0.999
   #   adam_weight_decay: 1e-06
   #   adam_epsilon: 1e-08
+  OPTIM_PACKAGE: torch.optim
   OPTIM_NAME: SGD
   OPTIM_CONFIG:
-    learning_rate: 1e-02
+    lr: 0.001
+    momentum: 0
+    weight_decay: 0.01
 
   ACCELERATOR_CONFIG:
     REPORT_TO: wandb

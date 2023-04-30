@@ -10,7 +10,7 @@ from torch.optim import AdamW, SGD
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from lion_pytorch import Lion
 
-from metrics.diceMetrics import dice_coef_metric, compute_iou, DiceLoss
+from metrics.diceMetrics import dice_coef_metric#, compute_iou, DiceLoss
 from accelerate import Accelerator
 import wandb
 from util.helper import DatasetPurpose, load_data
@@ -25,6 +25,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 
 from util.helper import get_args_config, optimizer_to
+import pickle
 
 
 def main():
@@ -163,35 +164,37 @@ def main():
     print("using device: ", accelerator.device)
     model = model.to(accelerator.device)
 
-    cur_epoch = 0
     try:
-        print(
-            f"Loading model from checkpoint: {config.MODEL.PRETRAIN_CKPT}_{config.TEST.LOAD_CKPT}.pt'"
-        )
-        load_path = str(
-            f"output/{config.MODEL.PRETRAIN_CKPT}/{config.MODEL.PRETRAIN_CKPT}_{config.TEST.LOAD_CKPT}.pt"
-        )
-        # save_dict = torch.load(load_path)
-        save_dict = torch.load(wandb.restore(load_path))
-        model.load_state_dict(save_dict["model_state_dict"])
-        # optimizer.load_state_dict(save_dict["optimizer_state_dict"])
-        cur_epoch = save_dict["epoch"] + 1
-        cur_loss = save_dict["loss"]
+        if bool(config.MODEL.PRETRAIN_CKPT):
+            print(f"Loading model from previous checkpoint: {file_name}_cur.pt'")
+            torch_checkpoint_load_path = str(f"output/{file_name}/{file_name}_cur.pt")
+            wandb_checkpoint_load_path = str(f"output/{file_name}/{file_name}_wandb_cur.pt")
 
-        accelerator.print(f"Loaded from {load_path}")
+            if os.path.exists(torch_checkpoint_load_path) == False:
+                raise Exception("Checkpoint does not exist, conitnuing..")
+
+            # save_dict = torch.load(load_path)
+            # print(wandb.restore(load_path))
+            # print(json.load(open(load_path, encoding='utf-8')))
+            with open(torch_checkpoint_load_path, "rb") as f:
+                save_dict = torch.load(f, pickle_module=pickle)
+                # print(save_dict)
+            wandb.restore(wandb_checkpoint_load_path)
+            model.load_state_dict(save_dict["model_state_dict"])
+
+            accelerator.print(f"Loaded from {torch_checkpoint_load_path}")
     except Exception as e:
-        cur_epoch = 0
-        print("Did not find config.MODEL.PRETRAIN_CKPT, aborting...")
+        print(f"Failed: {str(e)}")
         return
 
     # printing number of params
     pytorch_total_params = sum(p.numel() for p in model.parameters())
-    print(f"Total params of {file_name} model: {pytorch_total_params}")
+    print(f"Total params of {file_name} model: {pytorch_total_params:,}")
     pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"Trainable params of {file_name} model: {pytorch_total_params}")
+    print(f"Trainable params of {file_name} model: {pytorch_total_params:,}")
 
     # take smaller steps as we reach minimum
-    # scheduler = ReduceLROnPlateau(optimizer, "min")  # TODO: uncomment this
+    # scheduler = ReduceLROnPlateau(optimizer, "min") 
 
     # min_epoch_dice_loss = 1
 
@@ -200,6 +203,9 @@ def main():
     # running_loss = 0.0
     # losses = []
     test_iou = []
+
+    # Switch on Eval Mode..
+    model.eval()
 
     # print("Epoch {}/{}".format(epoch + 1, config.TRAIN.MAX_EPOCHS))
     for img, mask in tqdm(test_data_generator):
@@ -237,11 +243,13 @@ def main():
             # loss = train_loss(outputs, mask)
             # losses.append(loss.item())
 
-            # accelerator.log({"Test IOU": test_dice})  # Log IOU to wandb
-            print({"Test IOU": test_dice})
+            # print({"Test IOU": test_dice})
+            accelerator.log({"Test IOU": test_dice})  # Log IOU to wandb
+            
             # accelerator.backward(loss)
             # optimizer.step()
             # optimizer.zero_grad()
+        torch.cuda.empty_cache()
 
     # running_loss += loss.item() * img.size(0)
     # counter += 1
@@ -250,8 +258,9 @@ def main():
     # accelerator.log({"Epoch Loss": epoch_loss})
 
     mean_dice_test = np.array(test_iou).mean()
-    # accelerator.log({"Mean DICE on test set": mean_dice_test})
     print({"Mean DICE on test set": mean_dice_test})
+    accelerator.log({"Mean DICE on test set": mean_dice_test})
+    
 
     # val_mean_iou = None
     # if val_data_generator is not None:
