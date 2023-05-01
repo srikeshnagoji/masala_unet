@@ -9,15 +9,15 @@ MODEL:
     is_deconv: True
     is_batchnorm: True
 
-  PRETRAIN_CKPT: False
+  PRETRAIN_CKPT: True
 
 SEED: 1234
 
 DATASET:
   DATASET_LOADER: ISICDataset
   DATASET_CONFIG:
-    base_path: "E:/Projects/Data-Science/MTech/Courses/16.Capstone-Projects/Swin-Unet-Generic/swin_unet/dataset/skin_lesion"
-    # base_path: "/Users/srikeshnagoji/Documents/PythonWorkSpace/jupyter_lab_workspace/PES/final_thesis/dataset/ISIC_skin_converted"
+    # base_path: "E:/Projects/Data-Science/MTech/Courses/16.Capstone-Projects/Swin-Unet-Generic/swin_unet/dataset/skin_lesion"
+    base_path: "/Users/srikeshnagoji/Documents/PythonWorkSpace/jupyter_lab_workspace/PES/final_thesis/dataset/ISIC_skin_converted"
     subset_count: -1
 
   # DATASET_LOADER: BrainMRIDataset
@@ -50,19 +50,19 @@ TRAIN:
 
   LOSS_NAME: SimpleDiceLoss
 
-  # OPTIM_PACKAGE: lion_pytorch
-  # OPTIM_NAME: Lion
-  # OPTIM_CONFIG:
-  #   lr: 0.0001
-  #   betas: [0.95, 0.999]
-  #   weight_decay: 0.000001
-
-  OPTIM_PACKAGE: torch.optim
-  OPTIM_NAME: SGD
+  OPTIM_PACKAGE: lion_pytorch
+  OPTIM_NAME: Lion
   OPTIM_CONFIG:
-    lr: 0.01
-    momentum: 0
-    weight_decay: 0.0001
+    lr: 0.0001
+    betas: [0.95, 0.999]
+    weight_decay: 0.000001
+
+  # OPTIM_PACKAGE: torch.optim
+  # OPTIM_NAME: SGD
+  # OPTIM_CONFIG:
+  #   lr: 0.01
+  #   momentum: 0
+  #   weight_decay: 0.0001
 
   ACCELERATOR_CONFIG:
     REPORT_TO: wandb

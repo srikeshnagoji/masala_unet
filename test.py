@@ -10,7 +10,7 @@ from torch.optim import AdamW, SGD
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from lion_pytorch import Lion
 
-from metrics.diceMetrics import dice_coef_metric#, compute_iou, DiceLoss
+from metrics.diceMetrics import dice_coef_metric  # , compute_iou, DiceLoss
 from accelerate import Accelerator
 import wandb
 from util.helper import DatasetPurpose, load_data
@@ -168,7 +168,9 @@ def main():
         if bool(config.MODEL.PRETRAIN_CKPT):
             print(f"Loading model from previous checkpoint: {file_name}_cur.pt'")
             torch_checkpoint_load_path = str(f"output/{file_name}/{file_name}_cur.pt")
-            wandb_checkpoint_load_path = str(f"output/{file_name}/{file_name}_wandb_cur.pt")
+            wandb_checkpoint_load_path = str(
+                f"output/{file_name}/{file_name}_wandb_cur.pt"
+            )
 
             if os.path.exists(torch_checkpoint_load_path) == False:
                 raise Exception("Checkpoint does not exist, conitnuing..")
@@ -179,10 +181,15 @@ def main():
             with open(torch_checkpoint_load_path, "rb") as f:
                 save_dict = torch.load(f, pickle_module=pickle)
                 # print(save_dict)
-            wandb.restore(wandb_checkpoint_load_path)
+            # wandb.restore(
+            #     torch_checkpoint_load_path,
+            #     run_path="/Users/srikeshnagoji/Documents/PythonWorkSpace/jupyter_lab_workspace/PES/final_thesis/masala_unet/wandb/latest-run",
+            # )  # TODO: Uncomment below one instead
+            # wandb.restore(wandb_checkpoint_load_path)
             model.load_state_dict(save_dict["model_state_dict"])
 
             accelerator.print(f"Loaded from {torch_checkpoint_load_path}")
+            print(f"Loaded from {torch_checkpoint_load_path}")
     except Exception as e:
         print(f"Failed: {str(e)}")
         return
@@ -194,7 +201,7 @@ def main():
     print(f"Trainable params of {file_name} model: {pytorch_total_params:,}")
 
     # take smaller steps as we reach minimum
-    # scheduler = ReduceLROnPlateau(optimizer, "min") 
+    # scheduler = ReduceLROnPlateau(optimizer, "min")
 
     # min_epoch_dice_loss = 1
 
@@ -208,12 +215,14 @@ def main():
     model.eval()
 
     # print("Epoch {}/{}".format(epoch + 1, config.TRAIN.MAX_EPOCHS))
-    for img, mask in tqdm(test_data_generator):
+    epoch = 0
+
+    for img, mask in tqdm(test_data_loader):
         with accelerator.accumulate(model):
             img = img.to(accelerator.device)
             mask = mask.to(accelerator.device)
-
-            pred = model(img)
+            with torch.no_grad():
+                pred = model(img)
 
             # out_cut = np.copy(pred.data.cpu().numpy())
             # out_cut[np.nonzero(out_cut < 0.5)] = 0.0
@@ -237,15 +246,16 @@ def main():
                                 wandb.Image(mask[0, 0, :, :]),
                                 wandb.Image(pred_out_cut[0, 0, :, :]),
                             ]
-                        }
+                        },
+                        step=epoch,
                     )
 
             # loss = train_loss(outputs, mask)
             # losses.append(loss.item())
 
             # print({"Test IOU": test_dice})
-            accelerator.log({"Test IOU": test_dice})  # Log IOU to wandb
-            
+            wandb.log({"Test DICE": test_dice})  # Log IOU to wandb
+
             # accelerator.backward(loss)
             # optimizer.step()
             # optimizer.zero_grad()
@@ -259,8 +269,7 @@ def main():
 
     mean_dice_test = np.array(test_iou).mean()
     print({"Mean DICE on test set": mean_dice_test})
-    accelerator.log({"Mean DICE on test set": mean_dice_test})
-    
+    wandb.log({"Mean DICE on test set": mean_dice_test}, step=epoch)
 
     # val_mean_iou = None
     # if val_data_generator is not None:
