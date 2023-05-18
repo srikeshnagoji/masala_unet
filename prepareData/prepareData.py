@@ -34,8 +34,12 @@ def get_dataset_dataframe(
     )  # df[df["image_path"].str.contains("mask")].reset_index(drop=True)
 
     # Mask Mapping correction..
+    # df_masks["image_path"] = df_imgs["image_path"].apply(
+    #     lambda x: f'{x[:-len(".tif")]}_mask.tif'
+    # )
+    ## Added modification for png..
     df_masks["image_path"] = df_imgs["image_path"].apply(
-        lambda x: f'{x[:-len(".tif")]}_mask.tif'
+        lambda x: f'{x[:-len(".png")]}_mask.png'
     )
 
     if subset_count != -1:

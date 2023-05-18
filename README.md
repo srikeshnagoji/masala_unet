@@ -8,9 +8,9 @@ pip list --format=freeze > requirements.txt
 ```
 
 ## Setup:
-### Python == 3.7.2
+### Python == 3.9.13
 ```bash
-conda create -p ./venv python==3.7.2 -y
+conda create -p ./venv python==3.9.13 -y
 conda activate ./venv
 pip install requirements.txt
 

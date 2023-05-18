@@ -16,7 +16,7 @@ SEED: 1234
 DATASET:
   DATASET_LOADER: BrainMRIDataset
   DATASET_CONFIG:
-    base_path: E:/Projects/Data-Science/MTech/Courses/16.Capstone-Projects/Data/kaggle_3m
+    base_path: E:/Projects/Data-Science/MTech/Courses/16.Capstone-Projects/Data/BrainMRIDataset-Png
     subset_count: -1
 
   DATASET_TRANSFORMS:
@@ -57,8 +57,8 @@ TRAIN:
 
 
 TEST:
-  OUTPUT_DIR: "test_log\\swin_tiny_patch4_window7_224_ep300"
-  LOG_OUTPUT_DIR: "test_log\\swin_tiny_patch4_window7_224_ep300\\log"
+  # OUTPUT_DIR: "test_log\\swin_tiny_patch4_window7_224_ep300"
+  # LOG_OUTPUT_DIR: "test_log\\swin_tiny_patch4_window7_224_ep300\\log"
 
   TRAIN_TEST_SPLIT: 0.12
 
